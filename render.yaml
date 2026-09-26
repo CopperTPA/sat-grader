@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: sat-grader
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: APP_PASSWORD
+        sync: false
+      - key: FLASK_SECRET_KEY
+        sync: false

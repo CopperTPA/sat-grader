@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Answer Checker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #121417;
+    --panel: #1A1D22;
+    --text: #E5E7EA;
+    --muted: #7C828C;
+    --accent: #5FA8A0;
+    --line: #262A30;
+    --bad: #C1554A;
+    box-sizing: border-box;
+  }
+  * { box-sizing: inherit; }
+  html, body {
+    height: 100%;
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', system-ui, sans-serif;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    -webkit-tap-highlight-color: transparent;
+  }
+  .wrap {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 28px 20px 140px;
+  }
+  header {
+    margin-bottom: 24px;
+  }
+  .eyebrow {
+    color: var(--accent);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12.5px;
+    letter-spacing: 0.01em;
+    margin: 0 0 8px;
+  }
+  h1 {
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 600;
+    font-size: 26px;
+    line-height: 1.2;
+    margin: 0 0 8px;
+    color: var(--text);
+  }
+  p.sub {
+    color: var(--muted);
+    font-size: 14.5px;
+    line-height: 1.5;
+    margin: 0;
+    max-width: 48ch;
+  }
+
+  .dropzone {
+    margin-top: 24px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 28px 20px;
+    text-align: center;
+    background: var(--panel);
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+  .dropzone.drag {
+    border-color: var(--accent);
+    background: #16201F;
+  }
+  .dropzone p {
+    margin: 0 0 14px;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .pick-btn {
+    display: inline-block;
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    padding: 11px 22px;
+    border-radius: 999px;
+    font-size: 15px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  input[type="file"] { display: none; }
+
+  .count-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin: 22px 0 10px;
+  }
+  .count-row span:first-child {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    font-family: 'IBM Plex Mono', monospace;
+  }
+  .count-row span:last-child {
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  .thumbs {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+  .thumb {
+    position: relative;
+    aspect-ratio: 3 / 4;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    background: var(--panel);
+  }
+  .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; filter: saturate(0.85) brightness(0.95); }
+  .thumb button {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(18,20,23,0.85);
+    color: var(--text);
+    font-size: 12px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .thumb .badge {
+    position: absolute;
+    bottom: 4px;
+    left: 4px;
+    background: rgba(18,20,23,0.85);
+    color: var(--accent);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 999px;
+  }
+
+  .bar {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    padding: 14px 20px calc(14px + env(safe-area-inset-bottom, 0px));
+    background: linear-gradient(180deg, rgba(18,20,23,0) 0%, var(--bg) 35%);
+  }
+  .bar-inner { max-width: 640px; margin: 0 auto; }
+  .grade-btn {
+    width: 100%;
+    padding: 15px;
+    border: none;
+    border-radius: 10px;
+    background: var(--accent);
+    color: #0E1512;
+    font-size: 16px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  .grade-btn:disabled {
+    background: var(--line);
+    color: var(--muted);
+    cursor: not-allowed;
+  }
+
+  .status {
+    margin-top: 18px;
+    font-size: 14px;
+    color: var(--muted);
+    text-align: center;
+  }
+  .error-box {
+    margin-top: 18px;
+    background: #241A19;
+    border: 1px solid #3D2624;
+    color: var(--bad);
+    padding: 12px 14px;
+    border-radius: 10px;
+    font-size: 14px;
+  }
+
+  .results {
+    margin-top: 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .result-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 12px 14px;
+  }
+  .letter {
+    flex: 0 0 auto;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: #16201F;
+    color: var(--accent);
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 600;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .letter.unknown { background: var(--line); color: var(--muted); }
+  .result-text { min-width: 0; }
+  .q-num { font-size: 12px; color: var(--muted); margin: 0 0 2px; font-family: 'IBM Plex Mono', monospace; }
+  .a-text { font-size: 14.5px; margin: 0; line-height: 1.4; color: var(--text); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Practice test</p>
+    <h1>Answer checker</h1>
+    <p class="sub">Photograph up to {{ max_images }} questions and get the correct letter for each one, in order.</p>
+    <a href="{{ url_for('logout') }}" style="font-size:13px;color:var(--muted);text-decoration:underline;">Log out</a>
+  </header>
+
+  <div class="dropzone" id="dropzone">
+    <p>Add photos of your questions, one photo per question</p>
+    <button class="pick-btn" type="button" id="pickBtn">Choose photos</button>
+    <input type="file" id="fileInput" accept="image/*" multiple>
+  </div>
+
+  <div class="count-row">
+    <span id="countLabel">0 photos added</span>
+    <span id="limitLabel">max {{ max_images }}</span>
+  </div>
+  <div class="thumbs" id="thumbs"></div>
+
+  <div id="statusArea"></div>
+  <div class="results" id="results"></div>
+</div>
+
+<div class="bar">
+  <div class="bar-inner">
+    <button class="grade-btn" id="gradeBtn" disabled>Check my answers</button>
+  </div>
+</div>
+
+<script>
+const MAX_IMAGES = {{ max_images }};
+let files = [];
+
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const pickBtn = document.getElementById('pickBtn');
+const thumbs = document.getElementById('thumbs');
+const countLabel = document.getElementById('countLabel');
+const gradeBtn = document.getElementById('gradeBtn');
+const statusArea = document.getElementById('statusArea');
+const resultsEl = document.getElementById('results');
+
+pickBtn.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', (e) => addFiles(e.target.files));
+
+['dragenter', 'dragover'].forEach(evt =>
+  dropzone.addEventListener(evt, (e) => { e.preventDefault(); dropzone.classList.add('drag'); })
+);
+['dragleave', 'drop'].forEach(evt =>
+  dropzone.addEventListener(evt, (e) => { e.preventDefault(); dropzone.classList.remove('drag'); })
+);
+dropzone.addEventListener('drop', (e) => addFiles(e.dataTransfer.files));
+
+function addFiles(fileList) {
+  const incoming = Array.from(fileList).filter(f => f.type.startsWith('image/'));
+  const room = MAX_IMAGES - files.length;
+  if (room <= 0) {
+    setStatus(`You've already added the max of ${MAX_IMAGES} photos.`, true);
+    return;
+  }
+  const accepted = incoming.slice(0, room);
+  files = files.concat(accepted);
+  if (incoming.length > accepted.length) {
+    setStatus(`Only added ${accepted.length}: that's the ${MAX_IMAGES}-photo limit per check.`, true);
+  } else {
+    setStatus('');
+  }
+  render();
+  fileInput.value = '';
+}
+
+function removeFile(index) {
+  files.splice(index, 1);
+  render();
+}
+
+// Cache small preview thumbnails so we don't regenerate them on every render,
+// and so we never hold a full-resolution decoded photo in memory just to show
+// a 240px-wide preview (this is what was crashing mobile Safari past ~7 photos).
+const thumbCache = new WeakMap();
+
+function makeThumbnail(file, maxDim = 240) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(img.width * scale));
+      canvas.height = Math.max(1, Math.round(img.height * scale));
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL('image/jpeg', 0.7));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(''); };
+    img.src = url;
+  });
+}
+
+function getThumb(file) {
+  if (!thumbCache.has(file)) {
+    thumbCache.set(file, makeThumbnail(file));
+  }
+  return thumbCache.get(file);
+}
+
+function render() {
+  countLabel.textContent = `${files.length} photo${files.length === 1 ? '' : 's'} added`;
+  thumbs.innerHTML = '';
+  gradeBtn.disabled = files.length === 0;
+  files.forEach((f, i) => {
+    const div = document.createElement('div');
+    div.className = 'thumb';
+    const img = document.createElement('img');
+    const badge = document.createElement('span');
+    badge.className = 'badge';
+    badge.textContent = i + 1;
+    const btn = document.createElement('button');
+    btn.textContent = '×';
+    btn.onclick = () => removeFile(i);
+    div.appendChild(img);
+    div.appendChild(badge);
+    div.appendChild(btn);
+    thumbs.appendChild(div);
+    getThumb(f).then((src) => { if (src) img.src = src; });
+  });
+}
+
+function setStatus(msg, isError = false) {
+  statusArea.innerHTML = '';
+  if (!msg) return;
+  const div = document.createElement('div');
+  div.className = isError ? 'error-box' : 'status';
+  div.textContent = msg;
+  statusArea.appendChild(div);
+}
+
+gradeBtn.addEventListener('click', async () => {
+  if (files.length === 0) return;
+  gradeBtn.disabled = true;
+  gradeBtn.textContent = 'Checking…';
+  resultsEl.innerHTML = '';
+  setStatus(`Reading ${files.length} photo${files.length === 1 ? '' : 's'}…`);
+
+  const formData = new FormData();
+  files.forEach(f => formData.append('images', f));
+
+  try {
+    const res = await fetch('/api/grade', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Something went wrong.');
+    setStatus('');
+    renderResults(data.results);
+  } catch (err) {
+    setStatus(err.message, true);
+  } finally {
+    gradeBtn.disabled = files.length === 0;
+    gradeBtn.textContent = 'Check my answers';
+  }
+});
+
+function renderResults(results) {
+  resultsEl.innerHTML = '';
+  results.forEach(r => {
+    const card = document.createElement('div');
+    card.className = 'result-card';
+    const isUnknown = !r.answer || r.answer === '?';
+    card.innerHTML = `
+      <div class="letter ${isUnknown ? 'unknown' : ''}">${r.answer || '?'}</div>
+      <div class="result-text">
+        <p class="q-num">Question ${r.question_number ?? r.image}</p>
+        <p class="a-text">${r.answer_text ? escapeHtml(r.answer_text) : ''}</p>
+      </div>`;
+    resultsEl.appendChild(card);
+  });
+}
+
+function escapeHtml(s) {
+  const div = document.createElement('div');
+  div.textContent = s;
+  return div.innerHTML;
+}
+</script>
+</body>
+</html>

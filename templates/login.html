@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sign in — Answer Checker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root { --bg:#121417; --panel:#1A1D22; --text:#E5E7EA; --muted:#7C828C; --accent:#5FA8A0; --line:#262A30; --bad:#C1554A; box-sizing:border-box; }
+  * { box-sizing: inherit; }
+  html, body { height:100%; margin:0; background:var(--bg); color:var(--text); font-family:'Inter',system-ui,sans-serif; }
+  .wrap { min-height:100%; display:flex; align-items:center; justify-content:center; padding:24px; }
+  .card { width:100%; max-width:360px; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:32px 28px; }
+  h1 { font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:22px; margin:0 0 6px; color:var(--text); }
+  p.sub { color:var(--muted); font-size:14px; margin:0 0 22px; }
+  label { display:block; font-size:13px; font-weight:600; margin-bottom:6px; color:var(--text); }
+  input[type="password"] { width:100%; padding:12px 14px; border:1px solid var(--line); border-radius:8px; font-size:16px; font-family:inherit; margin-bottom:16px; background:var(--bg); color:var(--text); }
+  input[type="password"]:focus { outline:none; border-color:var(--accent); }
+  button { width:100%; padding:13px; border:none; border-radius:8px; background:var(--accent); color:#0E1512; font-size:15px; font-weight:600; font-family:inherit; cursor:pointer; }
+  .error { color:var(--bad); font-size:13px; margin:0 0 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>Sign in</h1>
+    <p class="sub">This checker is private. Enter the password to continue.</p>
+    {% if error %}<p class="error">{{ error }}</p>{% endif %}
+    <form method="post">
+      <label for="password">Password</label>
+      <input type="password" id="password" name="password" autofocus required>
+      <button type="submit">Sign in</button>
+    </form>
+  </div>
+</div>
+</body>
+</html>
