@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: sat-grader
+    runtime: python
+    plan: starter          # free tier sleeps + has a tiny CPU; starter stays awake
+    region: frankfurt      # closest Render region to Jeddah
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --worker-class gthread --workers 1 --threads 32 --timeout 120
+    healthCheckPath: /health
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: APP_PASSWORD
+        sync: false
+      - key: FLASK_SECRET_KEY
+        sync: false
