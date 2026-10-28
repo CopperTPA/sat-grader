@@ -223,6 +223,13 @@
   .result-text { min-width: 0; }
   .q-num { font-size: 12px; color: var(--muted); margin: 0 0 2px; font-family: 'IBM Plex Mono', monospace; }
   .a-text { font-size: 14.5px; margin: 0; line-height: 1.4; color: var(--text); }
+  .qn { flex: 0 0 auto; width: 30px; text-align: right; font-family: 'IBM Plex Mono', monospace; font-weight: 600; font-size: 15px; color: var(--muted); }
+  .result-card.warn { border-color: var(--bad); }
+  .result-card.empty { opacity: 0.45; }
+  .section-label { color: var(--bad); font-size: 13px; margin: 16px 0 2px; }
+  .summary { display: flex; gap: 12px; align-items: flex-start; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-bottom: 4px; }
+  .summary p { flex: 1; margin: 0; font-family: 'IBM Plex Mono', monospace; font-size: 13px; line-height: 1.7; word-spacing: 2px; color: var(--accent); }
+  .summary button { background: transparent; color: var(--accent); border: 1px solid var(--accent); border-radius: 999px; padding: 6px 14px; font-size: 13px; font-family: inherit; cursor: pointer; }
 </style>
 </head>
 <body>
@@ -366,8 +373,7 @@ function setStatus(msg, isError = false) {
 }
 
 // ---- Client-side shrink: runs as soon as a photo is added (one at a time, so
-// mobile Safari never holds several full-size decodes in memory). By the time
-// you tap "Check", every photo is already small (~150-250 KB).
+// mobile Safari never holds several full-size decodes in memory).
 const prepared = new WeakMap();
 let prepChain = Promise.resolve();
 
@@ -409,22 +415,73 @@ async function gradeOne(file, attempt = 0) {
   }
 }
 
-function makePendingCard() {
-  const card = document.createElement('div');
-  card.className = 'result-card';
-  card.innerHTML = `<div class="letter unknown">…</div>
-    <div class="result-text"><p class="q-num">Checking…</p><p class="a-text"></p></div>`;
-  return card;
+// ---- Slotting: the question number read from the page decides the position.
+// The photo order is ignored completely.
+function parseNum(v) {
+  const m = String(v ?? '').match(/\d+/);
+  return m ? parseInt(m[0], 10) : null;
 }
 
-function fillCard(card, r, i) {
-  const isUnknown = !r.answer || r.answer === '?';
-  card.innerHTML = `
-    <div class="letter ${isUnknown ? 'unknown' : ''}">${escapeHtml(r.answer || '?')}</div>
+function rowHtml({ num, r, photo, cls = '' }) {
+  const unknown = !r || !r.answer || r.answer === '?';
+  return `<div class="result-card ${cls}">
+    <div class="qn">${num ?? '?'}</div>
+    <div class="letter ${unknown ? 'unknown' : ''}">${escapeHtml(r?.answer || '?')}</div>
     <div class="result-text">
-      <p class="q-num">Photo ${i + 1} · Question ${escapeHtml(String(r.question_number ?? '?'))}</p>
-      <p class="a-text">${r.answer_text ? escapeHtml(r.answer_text) : ''}</p>
-    </div>`;
+      <p class="a-text">${r?.answer_text ? escapeHtml(r.answer_text) : ''}</p>
+      <p class="q-num">photo ${photo}</p>
+    </div>
+  </div>`;
+}
+
+function renderBoard(items, total, finished) {
+  const slots = new Map();   // number -> [{r, photo}]
+  const unplaced = [];       // couldn't read a number, or the request failed
+
+  items.forEach(({ i, r, error }) => {
+    const num = r ? parseNum(r.question_number) : null;
+    if (num === null) unplaced.push({ r: r || { answer: '?', answer_text: error }, photo: i + 1 });
+    else {
+      if (!slots.has(num)) slots.set(num, []);
+      slots.get(num).push({ r, photo: i + 1 });
+    }
+  });
+
+  let html = '';
+  if (slots.size) {
+    const nums = [...slots.keys()];
+    const lo = Math.min(...nums), hi = Math.max(...nums);
+    for (let n = lo; n <= hi; n++) {
+      const list = slots.get(n);
+      if (!list) {
+        html += `<div class="result-card empty"><div class="qn">${n}</div>
+          <div class="letter unknown">–</div>
+          <div class="result-text"><p class="a-text">${finished ? 'no photo for this number' : 'waiting…'}</p></div></div>`;
+      } else if (list.length === 1) {
+        html += rowHtml({ num: n, ...list[0] });
+      } else {
+        list.forEach(x => { html += rowHtml({ num: n, ...x, cls: 'warn' }); });
+      }
+    }
+  }
+  if (unplaced.length) {
+    html += `<p class="section-label">Couldn't read the question number</p>`;
+    unplaced.forEach(x => { html += rowHtml({ num: null, ...x, cls: 'warn' }); });
+  }
+
+  let summary = '';
+  if (finished && slots.size) {
+    const line = [...slots.keys()].sort((a, b) => a - b)
+      .map(n => `${n}${slots.get(n)[0].r.answer || '?'}`).join('  ');
+    summary = `<div class="summary"><p>${escapeHtml(line)}</p>
+      <button type="button" id="copyBtn">Copy</button></div>`;
+    window.__summaryText = [...slots.keys()].sort((a, b) => a - b)
+      .map(n => `${n}. ${slots.get(n)[0].r.answer || '?'}`).join('\n');
+  }
+  resultsEl.innerHTML = summary + html;
+  const cb = document.getElementById('copyBtn');
+  if (cb) cb.onclick = () => navigator.clipboard.writeText(window.__summaryText)
+    .then(() => { cb.textContent = 'Copied'; });
 }
 
 gradeBtn.addEventListener('click', async () => {
@@ -432,22 +489,19 @@ gradeBtn.addEventListener('click', async () => {
   const batch = files.slice();
   gradeBtn.disabled = true;
   gradeBtn.textContent = 'Checking…';
+  resultsEl.innerHTML = '';
   const t0 = performance.now();
-
-  // One placeholder per photo, filled in as each answer arrives (stays in order).
-  const cards = batch.map(() => makePendingCard());
-  resultsEl.replaceChildren(...cards);
-  let done = 0;
+  const items = [];
   setStatus(`0 / ${batch.length} done`);
 
   await Promise.all(batch.map(async (f, i) => {
-    let r;
-    try { r = await gradeOne(f); }
-    catch (err) { r = { answer: '?', answer_text: err.message }; }
-    fillCard(cards[i], r, i);
-    setStatus(`${++done} / ${batch.length} done`);
+    try { items.push({ i, r: await gradeOne(f) }); }
+    catch (err) { items.push({ i, error: err.message }); }
+    renderBoard(items, batch.length, false);
+    setStatus(`${items.length} / ${batch.length} done`);
   }));
 
+  renderBoard(items, batch.length, true);
   setStatus(`Finished in ${((performance.now() - t0) / 1000).toFixed(1)}s`);
   gradeBtn.disabled = files.length === 0;
   gradeBtn.textContent = 'Check my answers';
