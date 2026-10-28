@@ -289,6 +289,7 @@ function addFiles(fileList) {
   }
   const accepted = incoming.slice(0, room);
   files = files.concat(accepted);
+  accepted.forEach(prepare);
   if (incoming.length > accepted.length) {
     setStatus(`Only added ${accepted.length}: that's the ${MAX_IMAGES}-photo limit per check.`, true);
   } else {
@@ -364,45 +365,93 @@ function setStatus(msg, isError = false) {
   statusArea.appendChild(div);
 }
 
-gradeBtn.addEventListener('click', async () => {
-  if (files.length === 0) return;
-  gradeBtn.disabled = true;
-  gradeBtn.textContent = 'Checking…';
-  resultsEl.innerHTML = '';
-  setStatus(`Reading ${files.length} photo${files.length === 1 ? '' : 's'}…`);
+// ---- Client-side shrink: runs as soon as a photo is added (one at a time, so
+// mobile Safari never holds several full-size decodes in memory). By the time
+// you tap "Check", every photo is already small (~150-250 KB).
+const prepared = new WeakMap();
+let prepChain = Promise.resolve();
 
-  const formData = new FormData();
-  files.forEach(f => formData.append('images', f));
+async function shrink(file, maxEdge = 1280, quality = 0.8) {
+  const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
+  const scale = Math.min(1, maxEdge / Math.max(bmp.width, bmp.height));
+  const w = Math.round(bmp.width * scale), h = Math.round(bmp.height * scale);
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  canvas.getContext('2d').drawImage(bmp, 0, 0, w, h);
+  bmp.close();
+  return new Promise(res => canvas.toBlob(b => res(b), 'image/jpeg', quality));
+}
 
+function prepare(file) {
+  if (!prepared.has(file)) {
+    const p = prepChain.then(() => shrink(file));
+    prepChain = p.catch(() => {});
+    prepared.set(file, p);
+  }
+  return prepared.get(file);
+}
+
+async function gradeOne(file, attempt = 0) {
   try {
-    const res = await fetch('/api/grade', { method: 'POST', body: formData });
+    const blob = await prepare(file);
+    const fd = new FormData();
+    fd.append('image', blob, 'q.jpg');
+    const res = await fetch('/api/grade_one', { method: 'POST', body: fd });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Something went wrong.');
-    setStatus('');
-    renderResults(data.results);
+    return data.result;
   } catch (err) {
-    setStatus(err.message, true);
-  } finally {
-    gradeBtn.disabled = files.length === 0;
-    gradeBtn.textContent = 'Check my answers';
+    if (attempt < 2) {
+      await new Promise(r => setTimeout(r, 700 * (attempt + 1)));
+      return gradeOne(file, attempt + 1);
+    }
+    throw err;
   }
-});
-
-function renderResults(results) {
-  resultsEl.innerHTML = '';
-  results.forEach(r => {
-    const card = document.createElement('div');
-    card.className = 'result-card';
-    const isUnknown = !r.answer || r.answer === '?';
-    card.innerHTML = `
-      <div class="letter ${isUnknown ? 'unknown' : ''}">${r.answer || '?'}</div>
-      <div class="result-text">
-        <p class="q-num">Question ${r.question_number ?? r.image}</p>
-        <p class="a-text">${r.answer_text ? escapeHtml(r.answer_text) : ''}</p>
-      </div>`;
-    resultsEl.appendChild(card);
-  });
 }
+
+function makePendingCard() {
+  const card = document.createElement('div');
+  card.className = 'result-card';
+  card.innerHTML = `<div class="letter unknown">…</div>
+    <div class="result-text"><p class="q-num">Checking…</p><p class="a-text"></p></div>`;
+  return card;
+}
+
+function fillCard(card, r, i) {
+  const isUnknown = !r.answer || r.answer === '?';
+  card.innerHTML = `
+    <div class="letter ${isUnknown ? 'unknown' : ''}">${escapeHtml(r.answer || '?')}</div>
+    <div class="result-text">
+      <p class="q-num">Photo ${i + 1} · Question ${escapeHtml(String(r.question_number ?? '?'))}</p>
+      <p class="a-text">${r.answer_text ? escapeHtml(r.answer_text) : ''}</p>
+    </div>`;
+}
+
+gradeBtn.addEventListener('click', async () => {
+  if (files.length === 0) return;
+  const batch = files.slice();
+  gradeBtn.disabled = true;
+  gradeBtn.textContent = 'Checking…';
+  const t0 = performance.now();
+
+  // One placeholder per photo, filled in as each answer arrives (stays in order).
+  const cards = batch.map(() => makePendingCard());
+  resultsEl.replaceChildren(...cards);
+  let done = 0;
+  setStatus(`0 / ${batch.length} done`);
+
+  await Promise.all(batch.map(async (f, i) => {
+    let r;
+    try { r = await gradeOne(f); }
+    catch (err) { r = { answer: '?', answer_text: err.message }; }
+    fillCard(cards[i], r, i);
+    setStatus(`${++done} / ${batch.length} done`);
+  }));
+
+  setStatus(`Finished in ${((performance.now() - t0) / 1000).toFixed(1)}s`);
+  gradeBtn.disabled = files.length === 0;
+  gradeBtn.textContent = 'Check my answers';
+});
 
 function escapeHtml(s) {
   const div = document.createElement('div');
