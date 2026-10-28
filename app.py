@@ -56,7 +56,7 @@ Respond with ONLY a JSON object (no prose, no markdown fences), keys in this ord
 {"question_number": "3", "work": "...", "answer": "A", "answer_text": "..."}
 
 Rules:
-- "question_number": the number printed on the page, as a string, or "?" if not visible.
+- "question_number": the question number printed on the page, digits only (e.g. "8"), or "?" if not visible. Read it exactly as printed; never guess or infer it from the order of the photos.
 - "work": very brief scratch work, at most 60 words. For math, the key steps. For reading/writing, the deciding reason.
 - "answer": a single capital letter (A, B, C, D, or E if present) for the correct choice.
 - "answer_text": that option's text, shortened to under 12 words.
