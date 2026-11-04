@@ -7,12 +7,11 @@ The frontend can submit multiple requests concurrently.
 """
 
 import base64
-import functools
 import io
 import json
 import os
 import secrets
-from urllib.parse import urlparse
+import functools
 
 import anthropic
 from flask import (
@@ -24,21 +23,15 @@ from flask import (
     session,
     url_for,
 )
-from PIL import Image, ImageOps, UnidentifiedImageError
+from PIL import Image
 from pillow_heif import register_heif_opener
 
 
-# ============================================================
-# Image support
-# ============================================================
-
+# Register HEIC/HEIF image support
 register_heif_opener()
 
 
-# ============================================================
 # Configuration
-# ============================================================
-
 MAX_IMAGES = 27
 MAX_EDGE_PX = 1280
 JPEG_QUALITY = 80
@@ -46,35 +39,42 @@ MAX_UPLOAD_MB = 10
 
 MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-5-5")
 
-APP_PASSWORD = os.environ.get("APP_PASSWORD")
-SECRET_KEY = os.environ.get("FLASK_SECRET_KEY")
-
 app = Flask(__name__)
-
-# In production, set FLASK_SECRET_KEY in your hosting environment.
-# The fallback is intended for local development only.
-if not SECRET_KEY:
-    app.logger.warning(
-        "FLASK_SECRET_KEY is not set. Sessions may be invalidated "
-        "whenever the application restarts."
-    )
-    SECRET_KEY = secrets.token_hex(32)
-
-app.secret_key = SECRET_KEY
+app.secret_key = os.environ.get(
+    "FLASK_SECRET_KEY",
+    secrets.token_hex(32),
+)
 app.permanent_session_lifetime = 60 * 60 * 24 * 14
-
 app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_MB * 1024 * 1024
 
+APP_PASSWORD = os.environ.get("APP_PASSWORD")
+
 client = anthropic.Anthropic(
-    max_retries=2,
+    max_retries=4,
     timeout=60,
 )
 
 
-# ============================================================
-# SAT grading instructions
-# ============================================================
+# Authentication
+def login_required(view):
+    @functools.wraps(view)
+    def wrapped(*args, **kwargs):
+        if not session.get("logged_in"):
+            if request.path.startswith("/api/"):
+                return jsonify({
+                    "error": "Session expired. Reload and sign in again."
+                }), 401
 
+            return redirect(
+                url_for("login", next=request.path)
+            )
+
+        return view(*args, **kwargs)
+
+    return wrapped
+
+
+# SAT grading instructions
 SYSTEM_PROMPT = """You answer ONE photographed SAT question. It is either Reading & Writing or Math; decide which from the photo, then follow the matching section below.
 
 Respond with ONLY a JSON object (no prose, no markdown fences), keys in this order:
@@ -121,90 +121,43 @@ Never pick an option because it sounds natural.
 """
 
 
-# ============================================================
-# Authentication
-# ============================================================
-
-def is_safe_redirect(target):
-    """Allow only local relative redirects."""
-    if not target:
-        return False
-
-    parsed = urlparse(target)
-
-    return (
-        not parsed.scheme
-        and not parsed.netloc
-        and target.startswith("/")
-        and not target.startswith("//")
-    )
-
-
-def login_required(view):
-    @functools.wraps(view)
-    def wrapped(*args, **kwargs):
-        if not session.get("logged_in"):
-            if request.path.startswith("/api/"):
-                return jsonify({
-                    "error": "Session expired. Reload and sign in again."
-                }), 401
-
-            return redirect(
-                url_for("login", next=request.path)
-            )
-
-        return view(*args, **kwargs)
-
-    return wrapped
-
-
-# ============================================================
 # Image processing
-# ============================================================
-
 def to_small_jpeg(raw: bytes) -> bytes:
-    """Decode an uploaded image, correct its orientation, and resize it."""
-    with Image.open(io.BytesIO(raw)) as original:
-        img = ImageOps.exif_transpose(original)
-        img = img.convert("RGB")
+    img = Image.open(io.BytesIO(raw))
+    img = img.convert("RGB")
 
-        longest = max(img.size)
+    longest = max(img.size)
 
-        if longest > MAX_EDGE_PX:
-            scale = MAX_EDGE_PX / longest
+    if longest > MAX_EDGE_PX:
+        scale = MAX_EDGE_PX / longest
 
-            new_size = (
-                max(1, int(img.width * scale)),
-                max(1, int(img.height * scale)),
-            )
-
-            img = img.resize(
-                new_size,
-                Image.Resampling.LANCZOS,
-            )
-
-        buffer = io.BytesIO()
-
-        img.save(
-            buffer,
-            format="JPEG",
-            quality=JPEG_QUALITY,
-            optimize=True,
+        new_size = (
+            int(img.width * scale),
+            int(img.height * scale),
         )
 
-        return buffer.getvalue()
+        img = img.resize(
+            new_size,
+            Image.Resampling.LANCZOS,
+        )
+
+    buffer = io.BytesIO()
+
+    img.save(
+        buffer,
+        format="JPEG",
+        quality=JPEG_QUALITY,
+    )
+
+    return buffer.getvalue()
 
 
-# ============================================================
-# JSON parsing and validation
-# ============================================================
-
+# JSON parsing
 def parse_model_json(text: str):
-    """Extract and parse the JSON object returned by the model."""
     start = text.find("{")
     end = text.rfind("}")
 
-    if start == -1 or end == -1 or end < start:
+    if start == -1 or end == -1:
         raise json.JSONDecodeError(
             "No JSON object found",
             text,
@@ -214,38 +167,11 @@ def parse_model_json(text: str):
     return json.loads(text[start:end + 1])
 
 
-def validate_model_result(result):
-    """Check that the model returned all required string fields."""
-    if not isinstance(result, dict):
-        raise ValueError("Model response must be a JSON object.")
-
-    required_fields = {
-        "question_number",
-        "work",
-        "answer",
-        "answer_text",
-    }
-
-    if not required_fields.issubset(result):
-        raise ValueError("Model response is missing required fields.")
-
-    for field in required_fields:
-        if not isinstance(result[field], str):
-            raise ValueError(
-                f"Model response field '{field}' must be a string."
-            )
-
-    return result
-
-
-# ============================================================
 # Login route
-# ============================================================
-
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if not APP_PASSWORD:
-        return "APP_PASSWORD is not configured on the server.", 503
+        return "APP_PASSWORD isn't set on the server yet.", 500
 
     error = None
 
@@ -257,32 +183,26 @@ def login():
             session["logged_in"] = True
             session.permanent = True
 
-            next_url = request.args.get("next")
-
-            if is_safe_redirect(next_url):
-                return redirect(next_url)
-
-            return redirect(url_for("index"))
+            return redirect(
+                request.args.get("next") or url_for("index")
+            )
 
         error = "Wrong password."
 
-    return render_template("login.html", error=error)
+    return render_template(
+        "login.html",
+        error=error,
+    )
 
 
-# ============================================================
 # Logout route
-# ============================================================
-
 @app.route("/logout")
 def logout():
     session.clear()
     return redirect(url_for("login"))
 
 
-# ============================================================
 # Main page
-# ============================================================
-
 @app.route("/")
 @login_required
 def index():
@@ -292,19 +212,13 @@ def index():
     )
 
 
-# ============================================================
 # Health check
-# ============================================================
-
 @app.route("/health")
 def health():
-    return "ok", 200
+    return "ok"
 
 
-# ============================================================
 # Grade one question
-# ============================================================
-
 @app.route("/api/grade_one", methods=["POST"])
 @login_required
 def grade_one():
@@ -325,15 +239,12 @@ def grade_one():
                 "error": "The uploaded image is empty."
             }), 400
 
-        # Convert the uploaded image to a resized JPEG.
         image_data = to_small_jpeg(raw)
 
         image_base64 = base64.b64encode(
             image_data
         ).decode("utf-8")
 
-        # Send the image and use ephemeral caching for the
-        # repeated system prompt.
         response = client.messages.create(
             model=MODEL,
             max_tokens=1200,
@@ -360,76 +271,62 @@ def grade_one():
                         },
                         {
                             "type": "text",
-                            "text": (
-                                "Answer this question. "
-                                "Return JSON only."
-                            ),
+                            "text": "Answer this question. JSON only.",
                         },
                     ],
                 }
             ],
         )
 
-        # Extract text from the model response.
         raw_text = "".join(
             block.text
             for block in response.content
             if block.type == "text"
         )
 
-        if not raw_text.strip():
-            raise ValueError("The model returned an empty response.")
-
-        # Parse and validate the JSON.
         result = parse_model_json(raw_text)
-        result = validate_model_result(result)
 
-        # Record prompt-cache usage in server logs.
-        usage = response.usage
+        if not isinstance(result, dict):
+            raise ValueError(
+                "Model response must be a JSON object."
+            )
 
-        app.logger.info(
-            "Claude token usage: input=%s, output=%s, "
-            "cache_read=%s, cache_creation=%s",
-            getattr(usage, "input_tokens", 0),
-            getattr(usage, "output_tokens", 0),
-            getattr(usage, "cache_read_input_tokens", 0),
-            getattr(usage, "cache_creation_input_tokens", 0),
-        )
+        required_fields = {
+            "question_number",
+            "work",
+            "answer",
+            "answer_text",
+        }
 
-    except (UnidentifiedImageError, OSError, Image.DecompressionBombError):
-        return jsonify({
-            "error": "The uploaded file is not a valid supported image."
-        }), 400
+        if not required_fields.issubset(result):
+            raise ValueError(
+                "Model response is missing required fields."
+            )
+
+        if not all(
+            isinstance(result[field], str)
+            for field in required_fields
+        ):
+            raise ValueError(
+                "Model response contains invalid field types."
+            )
 
     except json.JSONDecodeError:
-        app.logger.warning(
-            "Claude returned invalid JSON: %s",
-            raw_text[:1000],
-        )
-
         return jsonify({
-            "error": "The model response wasn't valid JSON."
+            "error": "Model response wasn't valid JSON.",
+            "raw": raw_text,
         }), 502
 
     except anthropic.APIError as error:
-        app.logger.exception("Claude API request failed")
-
         return jsonify({
-            "error": "The grading service is temporarily unavailable."
+            "error": f"Claude API error: {error}"
         }), 502
 
-    except ValueError as error:
-        app.logger.warning("Invalid grading response: %s", error)
-
-        return jsonify({
-            "error": "The model returned an invalid grading response."
-        }), 502
-
-    except Exception:
+    except Exception as error:
         app.logger.exception("Question grading failed")
 
         return jsonify({
-            "error": "An unexpected server error occurred."
+            "error": str(error)
         }), 500
 
     return jsonify({
@@ -437,10 +334,7 @@ def grade_one():
     })
 
 
-# ============================================================
 # Application entry point
-# ============================================================
-
 if __name__ == "__main__":
     app.run(
         host="0.0.0.0",
