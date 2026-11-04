@@ -494,12 +494,25 @@ gradeBtn.addEventListener('click', async () => {
   const items = [];
   setStatus(`0 / ${batch.length} done`);
 
-  await Promise.all(batch.map(async (f, i) => {
-    try { items.push({ i, r: await gradeOne(f) }); }
-    catch (err) { items.push({ i, error: err.message }); }
-    renderBoard(items, batch.length, false);
-    setStatus(`${items.length} / ${batch.length} done`);
-  }));
+  // Process at most 5 questions at a time.
+  const BATCH_SIZE = 5;
+
+  for (let start = 0; start < batch.length; start += BATCH_SIZE) {
+    const currentBatch = batch.slice(start, start + BATCH_SIZE);
+
+    await Promise.all(currentBatch.map(async (f, offset) => {
+      const i = start + offset;
+
+      try {
+        items.push({ i, r: await gradeOne(f) });
+      } catch (err) {
+        items.push({ i, error: err.message });
+      }
+
+      renderBoard(items, batch.length, false);
+      setStatus(`${items.length} / ${batch.length} done`);
+    }));
+  }
 
   renderBoard(items, batch.length, true);
   setStatus(`Finished in ${((performance.now() - t0) / 1000).toFixed(1)}s`);
