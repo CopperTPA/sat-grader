@@ -1,10 +1,12 @@
 """
-SAT Answer Grader — fast version
----------------------------------
+SAT Answer Grader — fast version (merged Reading/Writing + Math prompt)
+-----------------------------------------------------------------------
 The browser shrinks each photo, then sends all photos IN PARALLEL, one per
-request, to POST /api/grade_one. Each request makes one small Claude call.
-Total time ≈ the slowest single call (a few seconds) instead of the sum of
-everything.
+request, to POST /api/grade_one. Each request makes one Claude call.
+Total time ≈ the slowest single call instead of the sum of everything.
+
+Optional env var THINKING_BUDGET (default 0 = off). Set it to e.g. 2000 on
+Render to turn on extended thinking for every question (slower, more accurate).
 """
 
 import base64
@@ -27,6 +29,8 @@ MAX_EDGE_PX = 1280
 JPEG_QUALITY = 80
 # Verify this string against https://docs.claude.com (models overview).
 MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-5-5")
+THINKING_BUDGET = int(os.environ.get("THINKING_BUDGET", "0"))
+BASE_MAX_TOKENS = 1200  # room for the JSON incl. up to ~250 words of math work
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", secrets.token_hex(32))
@@ -35,7 +39,7 @@ app.permanent_session_lifetime = 60 * 60 * 24 * 14
 APP_PASSWORD = os.environ.get("APP_PASSWORD")
 
 # max_retries covers 429/overloaded errors when 27 calls fire at once
-client = anthropic.Anthropic(max_retries=4, timeout=60)
+client = anthropic.Anthropic(max_retries=4, timeout=120)
 
 
 def login_required(view):
@@ -49,18 +53,45 @@ def login_required(view):
     return wrapped
 
 
-SYSTEM_PROMPT = """You are answering ONE photographed SAT-style multiple-choice question.
+SYSTEM_PROMPT = """You answer ONE photographed SAT question. It is either Reading & Writing or Math; decide which from the photo, then follow the matching section below.
 
 Respond with ONLY a JSON object (no prose, no markdown fences), keys in this order:
 
-{"question_number": "3", "work": "...", "answer": "A", "answer_text": "..."}
+{"question_number": "17", "work": "...", "answer": "C", "answer_text": "..."}
 
-Rules:
-- "question_number": the question number printed on the page, digits only (e.g. "8"), or "?" if not visible. Read it exactly as printed; never guess or infer it from the order of the photos.
-- "work": very brief scratch work, at most 60 words. For math, the key steps. For reading/writing, the deciding reason.
-- "answer": a single capital letter (A, B, C, D, or E if present) for the correct choice.
-- "answer_text": that option's text, shortened to under 12 words.
+OUTPUT RULES
+- "question_number": the number printed on the page, digits only, or "?" if not visible. Read it exactly as printed; never infer it from photo order.
+- "work": your reasoning, written BEFORE the answer. Reading/Writing: max 130 words. Math: max 250 words. Test every option in order A to D for Reading/Writing and say why the closest rival fails.
+- "answer": a single capital letter for multiple choice. For a Math question with NO answer choices (student-produced response), put the final number here (fraction or decimal as the question allows).
+- "answer_text": the option's text under 12 words (leave empty for student-produced responses).
 - If the question is illegible or ambiguous, use "answer": "?" and explain briefly in "answer_text".
+
+=== READING & WRITING ===
+
+CONVENTIONS CHECKLIST
+1. Back up to the start of the sentence and read to the period. Count independent clauses.
+2. Two full clauses need a period, semicolon, colon/dash, or comma plus and/but/or/so/yet. A comma alone is a splice. No punctuation is a run-on.
+3. Does the sentence already have a main verb? If yes, the blank is a modifier and must not add a finite verb. If no, the blank must supply one. An -ing word is NOT a main verb.
+4. A transition inside a sentence (however, though, therefore) links its own clause to the PREVIOUS sentence. Match contrast or continuation, then attach it to the clause it belongs to. A clause-opening transition follows a period or semicolon, and a mid-clause one is set off by commas.
+5. Apostrophes: look at the next word. A noun followed by a noun (even with an adjective between) must be possessive. Singular owner -> -'s, plural owners -> -s'. A noun followed by anything else takes no apostrophe.
+6. Verbs: match subject and tense to the surrounding verbs, ignoring words between subject and verb.
+
+WORDS IN CONTEXT
+Read the whole passage. Predict your own word for the blank. Mark it positive or negative using the clues (continuers like and/because/by keep direction; contradictors like but/however/although flip it). Go through options in order and eliminate mismatches. Judge meaning, not how a word sounds. For "meaning in context" questions, the everyday meaning is usually a trap.
+
+FUNCTION OF UNDERLINED TEXT
+Ask WHY the sentence is there, not what it says. Back up and read the sentence(s) before it: find the claim it supports, illustrates, contrasts, or qualifies. Do not choose an option just because the next sentence continues the topic.
+
+EVIDENCE / ILLUSTRATE QUESTIONS
+1) Restate the claim simply. 2) Decide what kind of line would prove it. 3) Pick the line that directly demonstrates it. Lines that are merely on topic or show a different attitude are wrong.
+
+=== MATH ===
+- Read units, "which of the following," and exactly what is being asked (e.g., x vs. 2x) before solving.
+- Define variables, solve step by step, then CHECK by substituting your result back into the original problem (or by estimating).
+- If a graph or table is shown, read the values carefully and state them in "work".
+- Re-read the question last to make sure your answer matches what was asked.
+
+Never pick an option because it sounds natural.
 """
 
 
@@ -128,9 +159,10 @@ def grade_one():
     raw_text = ""
     try:
         data = to_small_jpeg(f.read())
-        response = client.messages.create(
+
+        kwargs = dict(
             model=MODEL,
-            max_tokens=600,
+            max_tokens=BASE_MAX_TOKENS + THINKING_BUDGET,
             system=SYSTEM_PROMPT,
             messages=[{
                 "role": "user",
@@ -144,6 +176,12 @@ def grade_one():
                 ],
             }],
         )
+        if THINKING_BUDGET > 0:
+            # max_tokens must be larger than the thinking budget (it is above)
+            kwargs["thinking"] = {"type": "enabled", "budget_tokens": THINKING_BUDGET}
+
+        response = client.messages.create(**kwargs)
+        # thinking blocks (if any) are skipped; only text blocks are used
         raw_text = "".join(b.text for b in response.content if b.type == "text")
         result = parse_model_json(raw_text)
     except json.JSONDecodeError:
