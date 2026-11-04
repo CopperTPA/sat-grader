@@ -1,12 +1,10 @@
-"""
-SAT Answer Grader — fast version (merged Reading/Writing + Math prompt)
------------------------------------------------------------------------
+ """
+SAT Answer Grader — fast version
+---------------------------------
 The browser shrinks each photo, then sends all photos IN PARALLEL, one per
-request, to POST /api/grade_one. Each request makes one Claude call.
-Total time ≈ the slowest single call instead of the sum of everything.
-
-Optional env var THINKING_BUDGET (default 0 = off). Set it to e.g. 2000 on
-Render to turn on extended thinking for every question (slower, more accurate).
+request, to POST /api/grade_one. Each request makes one small Claude call.
+Total time ≈ the slowest single call (a few seconds) instead of the sum of
+everything.
 """
 
 import base64
@@ -29,8 +27,6 @@ MAX_EDGE_PX = 1280
 JPEG_QUALITY = 80
 # Verify this string against https://docs.claude.com (models overview).
 MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-5-5")
-THINKING_BUDGET = int(os.environ.get("THINKING_BUDGET", "0"))
-BASE_MAX_TOKENS = 1200  # room for the JSON incl. up to ~250 words of math work
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", secrets.token_hex(32))
@@ -39,7 +35,7 @@ app.permanent_session_lifetime = 60 * 60 * 24 * 14
 APP_PASSWORD = os.environ.get("APP_PASSWORD")
 
 # max_retries covers 429/overloaded errors when 27 calls fire at once
-client = anthropic.Anthropic(max_retries=4, timeout=120)
+client = anthropic.Anthropic(max_retries=4, timeout=60)
 
 
 def login_required(view):
@@ -159,10 +155,9 @@ def grade_one():
     raw_text = ""
     try:
         data = to_small_jpeg(f.read())
-
-        kwargs = dict(
+        response = client.messages.create(
             model=MODEL,
-            max_tokens=BASE_MAX_TOKENS + THINKING_BUDGET,
+            max_tokens=600,
             system=SYSTEM_PROMPT,
             messages=[{
                 "role": "user",
@@ -176,12 +171,6 @@ def grade_one():
                 ],
             }],
         )
-        if THINKING_BUDGET > 0:
-            # max_tokens must be larger than the thinking budget (it is above)
-            kwargs["thinking"] = {"type": "enabled", "budget_tokens": THINKING_BUDGET}
-
-        response = client.messages.create(**kwargs)
-        # thinking blocks (if any) are skipped; only text blocks are used
         raw_text = "".join(b.text for b in response.content if b.type == "text")
         result = parse_model_json(raw_text)
     except json.JSONDecodeError:
