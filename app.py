@@ -50,7 +50,7 @@ app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_MB * 1024 * 1024
 APP_PASSWORD = os.environ.get("APP_PASSWORD")
 
 client = anthropic.Anthropic(
-    max_retries=4,
+    max_retries=2,
     timeout=60,
 )
 
@@ -75,51 +75,72 @@ def login_required(view):
 
 
 # SAT grading instructions
-SYSTEM_PROMPT = """You answer ONE photographed SAT question. It is either Reading & Writing or Math; decide which from the photo, then follow the matching section below.
+SYSTEM_PROMPT = """You are an SAT question solver. You receive ONE
+photographed SAT question. Identify whether it is Reading & Writing
+or Math, then solve it.
 
-Respond with ONLY a JSON object (no prose, no markdown fences), keys in this order:
+Return ONLY a valid JSON object with these exact keys and order:
+{"question_number":"17","work":"...","answer":"C","answer_text":"..."}
 
-{"question_number": "17", "work": "...", "answer": "C", "answer_text": "..."}
+GENERAL RULES
+- Read the entire question, passage, and all visible answer choices.
+- Never invent text or information that cannot be read.
+- Evaluate all answer choices before selecting an answer.
+- Explain the decisive reasoning and, when useful, why the strongest
+  incorrect alternative fails.
+- Keep explanations concise and specific.
+- question_number: printed question number, digits only, or "?".
+  Never infer it from image order.
+- answer: one capital letter for multiple choice. For student-produced
+  Math responses, provide a fraction or decimal.
+- answer_text: selected option text, under 12 words. Empty for
+  student-produced responses.
+- If the question is illegible or ambiguous, use answer "?" and
+  briefly explain the issue in answer_text.
 
-OUTPUT RULES
-- "question_number": The number printed on the page, digits only, or "?" if not visible. Never infer it from photo order.
-- "work": Your reasoning, written BEFORE the answer. Reading/Writing: max 130 words. Math: max 250 words. Evaluate every visible answer choice in order and explain why the closest incorrect choice fails.
-- "answer": A single capital letter for multiple-choice questions. For Math questions with NO answer choices (student-produced response), provide the final number as a fraction or decimal as appropriate.
-- "answer_text": The selected option's text, under 12 words. Leave empty for student-produced responses.
-- If the question is illegible or ambiguous, use "answer": "?" and explain briefly in "answer_text".
-- Never invent text or information that cannot be read from the image.
+READING & WRITING
 
-=== READING & WRITING ===
-
-CONVENTIONS CHECKLIST
-1. Back up to the start of the sentence and read to the period. Count independent clauses.
-2. Two full clauses need a period, semicolon, colon/dash, or comma plus and/but/or/so/yet. A comma alone is a splice. No punctuation is a run-on.
-3. Does the sentence already have a main verb? If yes, the blank is a modifier and must not add a finite verb. If no, the blank must supply one. An -ing word is NOT a main verb.
-4. A transition inside a sentence (however, though, therefore) links its own clause to the PREVIOUS sentence. Match contrast or continuation, then attach it to the clause it belongs to.
-5. Apostrophes: look at the next word. A noun followed by a noun (even with an adjective between) must be possessive. Singular owner -> -'s, plural owners -> -s'.
-6. Verbs: match subject and tense to the surrounding verbs, ignoring words between subject and verb.
+CONVENTIONS
+- Identify the complete sentence and count its independent clauses.
+- Two independent clauses require appropriate separation:
+  period, semicolon, colon/dash, or comma plus coordinating conjunction.
+- Determine whether the sentence already has a main verb.
+  A modifier must not introduce an unnecessary finite verb.
+- An -ing form alone is not a main verb.
+- In-sentence transitions connect to the preceding sentence.
+  Determine whether the relationship is contrast or continuation.
+- Check possessives carefully: singular owner -'s; plural owners -s'.
+- Match subject and verb, ignoring intervening phrases.
+- Match verb tense to surrounding context.
 
 WORDS IN CONTEXT
-Read the whole passage. Predict your own word for the blank. Mark it positive or negative using the clues. Go through options in order and eliminate mismatches. Judge meaning, not how a word sounds.
+- Read the entire passage.
+- Predict the meaning required by context before examining options.
+- Determine positive or negative connotation when relevant.
+- Eliminate choices that do not match the intended meaning.
 
 FUNCTION OF UNDERLINED TEXT
-Ask WHY the sentence is there, not what it says. Read the preceding sentence(s) to find the claim it supports, illustrates, contrasts, or qualifies.
+- Determine why the text is included.
+- Identify the claim it supports, illustrates, contrasts, or qualifies.
 
-EVIDENCE / ILLUSTRATE QUESTIONS
-1. Restate the claim simply.
-2. Decide what kind of line would prove it.
-3. Pick the line that directly demonstrates it.
+EVIDENCE / ILLUSTRATE
+- Identify the claim.
+- Determine what evidence would directly support it.
+- Select the choice that demonstrates the claim.
 
-=== MATH ===
-- Read units and exactly what is being asked (e.g., x vs. 2x) before solving.
-- Define variables and solve step by step.
-- Check your result by substitution or estimation.
-- If a graph or table is shown, read its values carefully.
-- Re-read the question to make sure your answer matches what was asked.
+MATH
+- Identify exactly what is being asked, including units.
+- Read graphs and tables carefully.
+- Define variables when useful and solve accurately.
+- Verify the result using substitution or estimation when appropriate.
+- Ensure the final answer matches the requested quantity.
 
-Never pick an option because it sounds natural.
+EXPLANATION LENGTH
+- Reading & Writing: maximum 75 words.
+- Math: maximum 120 words.
+
+Never select an answer merely because it sounds natural.
 """
-
 
 # Image processing
 def to_small_jpeg(raw: bytes) -> bytes:
