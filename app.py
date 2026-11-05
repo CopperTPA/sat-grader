@@ -22,6 +22,7 @@ import secrets
 import functools
 
 import anthropic
+
 from flask import (
     Flask,
     jsonify,
@@ -31,7 +32,8 @@ from flask import (
     session,
     url_for,
 )
-from PIL import Image, UnidentifiedImageError
+
+from PIL import Image, ImageOps, UnidentifiedImageError
 from pillow_heif import register_heif_opener
 
 
@@ -42,8 +44,10 @@ from pillow_heif import register_heif_opener
 register_heif_opener()
 
 MAX_IMAGES = 27
-MAX_EDGE_PX = 1280
-JPEG_QUALITY = 80
+
+# Frontend targets 7 MB per image.
+# Flask's limit includes multipart form-data overhead.
+MAX_UPLOAD_BYTES = 9 * 1024 * 1024
 
 
 # --------------------------------------------------
@@ -57,7 +61,7 @@ MODEL = os.environ.get(
 
 ANSWER_MAX_TOKENS = 600
 
-# Maximum output allowance for requests using adaptive thinking.
+# Maximum output allowance for adaptive thinking.
 # This is NOT a fixed thinking budget.
 THINKING_MAX_TOKENS = 4600
 
@@ -81,6 +85,8 @@ client = anthropic.Anthropic(
 
 app = Flask(__name__)
 
+app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_BYTES
+
 app.secret_key = os.environ.get(
     "FLASK_SECRET_KEY",
     secrets.token_hex(32)
@@ -89,6 +95,128 @@ app.secret_key = os.environ.get(
 app.permanent_session_lifetime = 60 * 60 * 24 * 14
 
 APP_PASSWORD = os.environ.get("APP_PASSWORD")
+
+
+# --------------------------------------------------
+# IMAGE VALIDATION
+# --------------------------------------------------
+
+class InvalidImageError(Exception):
+    """Raised when an uploaded image is invalid or unsupported."""
+    pass
+
+
+def prepare_image(raw_image: bytes):
+    """
+    Validate an uploaded image using its actual file contents.
+
+    Supported formats:
+    - JPEG
+    - PNG
+    - WebP
+    - GIF
+    - HEIF/HEIC (converted to JPEG)
+
+    Returns:
+        (image_bytes, media_type)
+    """
+
+    if not raw_image:
+        raise InvalidImageError("The uploaded image is empty.")
+
+    # First, identify and verify the actual image format.
+    try:
+        with Image.open(io.BytesIO(raw_image)) as img:
+            image_format = (img.format or "").upper()
+            img.verify()
+
+    except (
+        UnidentifiedImageError,
+        OSError,
+        ValueError,
+        Image.DecompressionBombError
+    ) as exc:
+
+        raise InvalidImageError(
+            "The uploaded file is not a valid image."
+        ) from exc
+
+    # Map actual image formats to Claude MIME types.
+    supported_formats = {
+        "JPEG": "image/jpeg",
+        "PNG": "image/png",
+        "WEBP": "image/webp",
+        "GIF": "image/gif",
+    }
+
+    # Supported formats can be sent without re-encoding.
+    if image_format in supported_formats:
+
+        return (
+            raw_image,
+            supported_formats[image_format]
+        )
+
+    # HEIF/HEIC fallback: convert to JPEG.
+    if image_format in {"HEIF", "HEIC"}:
+
+        try:
+            with Image.open(io.BytesIO(raw_image)) as img:
+
+                img = ImageOps.exif_transpose(img)
+                img = img.convert("RGB")
+
+                buffer = io.BytesIO()
+
+                img.save(
+                    buffer,
+                    format="JPEG",
+                    quality=90,
+                    optimize=True
+                )
+
+                return (
+                    buffer.getvalue(),
+                    "image/jpeg"
+                )
+
+        except (
+            UnidentifiedImageError,
+            OSError,
+            ValueError,
+            Image.DecompressionBombError
+        ) as exc:
+
+            raise InvalidImageError(
+                "Could not convert the HEIC/HEIF image."
+            ) from exc
+
+    raise InvalidImageError(
+        f"Unsupported image format: {image_format or 'unknown'}"
+    )
+
+
+# --------------------------------------------------
+# JSON RESPONSE PARSER
+# --------------------------------------------------
+
+def parse_model_json(text: str):
+    """
+    Extract the JSON object from Claude's response.
+    """
+
+    start = text.find("{")
+    end = text.rfind("}")
+
+    if start == -1 or end == -1 or end < start:
+
+        raise json.JSONDecodeError(
+            "No valid JSON object found.",
+            text,
+            0
+        )
+
+    return json.loads(text[start:end + 1])
 
 
 # --------------------------------------------------
@@ -103,6 +231,7 @@ def login_required(view):
         if not session.get("logged_in"):
 
             if request.path.startswith("/api/"):
+
                 return jsonify({
                     "error": "Session expired. Reload and sign in again."
                 }), 401
@@ -136,75 +265,6 @@ Rules:
 
 
 # --------------------------------------------------
-# IMAGE PROCESSING
-# --------------------------------------------------
-
-def to_small_jpeg(raw: bytes) -> bytes:
-    """
-    Compress an image into a smaller JPEG.
-
-    If the browser already sends a reasonably small JPEG,
-    skip image decoding to improve performance.
-    """
-
-    if not raw:
-        raise ValueError("The uploaded image is empty.")
-
-    if raw[:3] == b"\xff\xd8\xff" and len(raw) < 1_500_000:
-        return raw
-
-    img = Image.open(io.BytesIO(raw)).convert("RGB")
-
-    longest = max(img.size)
-
-    if longest > MAX_EDGE_PX:
-
-        scale = MAX_EDGE_PX / longest
-
-        new_size = (
-            int(img.width * scale),
-            int(img.height * scale)
-        )
-
-        img = img.resize(
-            new_size,
-            Image.LANCZOS
-        )
-
-    buffer = io.BytesIO()
-
-    img.save(
-        buffer,
-        format="JPEG",
-        quality=JPEG_QUALITY
-    )
-
-    return buffer.getvalue()
-
-
-# --------------------------------------------------
-# JSON RESPONSE PARSER
-# --------------------------------------------------
-
-def parse_model_json(text: str):
-    """
-    Extract the JSON object from Claude's response.
-    """
-
-    start = text.find("{")
-    end = text.rfind("}")
-
-    if start == -1 or end == -1 or end < start:
-        raise json.JSONDecodeError(
-            "No valid JSON object found.",
-            text,
-            0
-        )
-
-    return json.loads(text[start:end + 1])
-
-
-# --------------------------------------------------
 # LOGIN ROUTE
 # --------------------------------------------------
 
@@ -212,6 +272,7 @@ def parse_model_json(text: str):
 def login():
 
     if not APP_PASSWORD:
+
         return "APP_PASSWORD isn't set on the server yet.", 500
 
     error = None
@@ -287,6 +348,7 @@ def grade_one():
     f = request.files.get("image")
 
     if not f:
+
         return jsonify({
             "error": "No image received."
         }), 400
@@ -304,7 +366,7 @@ def grade_one():
 
         raw_image = f.read()
 
-        data = raw_image
+        data, media_type = prepare_image(raw_image)
 
         encoded_image = base64.b64encode(
             data
@@ -334,7 +396,7 @@ def grade_one():
 
                             "source": {
                                 "type": "base64",
-                                "media_type": "image/jpeg",
+                                "media_type": media_type,
                                 "data": encoded_image
                             }
                         },
@@ -411,6 +473,12 @@ def grade_one():
     # ERROR HANDLING
     # ----------------------------------------------
 
+    except InvalidImageError as e:
+
+        return jsonify({
+            "error": str(e)
+        }), 400
+
     except json.JSONDecodeError:
 
         return jsonify({
@@ -418,25 +486,37 @@ def grade_one():
             "raw": raw_text
         }), 502
 
-    except UnidentifiedImageError:
-
-        return jsonify({
-            "error": "The uploaded file is not a supported image."
-        }), 400
-
     except anthropic.APIError as e:
+
+        app.logger.exception("Claude API error")
 
         return jsonify({
             "error": f"Claude API error: {e}"
         }), 502
 
-    except Exception as e:
+    except Exception:
 
         app.logger.exception("Unexpected grading error")
 
         return jsonify({
-            "error": str(e)
+            "error": "An unexpected server error occurred."
         }), 500
+
+
+# --------------------------------------------------
+# UPLOAD SIZE ERROR HANDLER
+# --------------------------------------------------
+
+@app.errorhandler(413)
+def request_too_large(error):
+
+    if request.path.startswith("/api/"):
+
+        return jsonify({
+            "error": "Image upload is too large. Maximum request size is 9 MB."
+        }), 413
+
+    return "Upload too large.", 413
 
 
 # --------------------------------------------------
@@ -448,5 +528,5 @@ if __name__ == "__main__":
     app.run(
         host="0.0.0.0",
         port=int(os.environ.get("PORT", 5000)),
-        debug=True
+        debug=os.environ.get("FLASK_DEBUG") == "1"
     )
