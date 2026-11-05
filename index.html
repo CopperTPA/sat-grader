@@ -1,0 +1,1018 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Answer Checker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #121417;
+    --panel: #1A1D22;
+    --text: #E5E7EA;
+    --muted: #7C828C;
+    --accent: #5FA8A0;
+    --line: #262A30;
+    --bad: #C1554A;
+    box-sizing: border-box;
+  }
+  * { box-sizing: inherit; }
+  html, body {
+    height: 100%;
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', system-ui, sans-serif;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    -webkit-tap-highlight-color: transparent;
+  }
+  .wrap {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 28px 20px 140px;
+  }
+  header { margin-bottom: 24px; }
+  .eyebrow {
+    color: var(--accent);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12.5px;
+    letter-spacing: 0.01em;
+    margin: 0 0 8px;
+  }
+  h1 {
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 600;
+    font-size: 26px;
+    line-height: 1.2;
+    margin: 0 0 8px;
+    color: var(--text);
+  }
+  p.sub {
+    color: var(--muted);
+    font-size: 14.5px;
+    line-height: 1.5;
+    margin: 0;
+    max-width: 48ch;
+  }
+  .dropzone {
+    margin-top: 24px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 28px 20px;
+    text-align: center;
+    background: var(--panel);
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+  .dropzone.drag {
+    border-color: var(--accent);
+    background: #16201F;
+  }
+  .dropzone p {
+    margin: 0 0 14px;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .pick-btn {
+    display: inline-block;
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    padding: 11px 22px;
+    border-radius: 999px;
+    font-size: 15px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  input[type="file"] { display: none; }
+
+  .toggle-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    margin-top: 12px;
+    padding: 12px 14px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: border-color 0.15s ease;
+  }
+  .toggle-row.on { border-color: var(--accent); }
+  .toggle-row strong {
+    display: block;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .toggle-row small {
+    display: block;
+    margin-top: 2px;
+    color: var(--muted);
+    font-size: 12.5px;
+    line-height: 1.4;
+  }
+  #thinkingToggle, #bookModeToggle {
+    -webkit-appearance: none;
+    appearance: none;
+    flex: 0 0 auto;
+    width: 42px;
+    height: 24px;
+    margin: 0;
+    border-radius: 999px;
+    background: var(--line);
+    position: relative;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+  #thinkingToggle::after, #bookModeToggle::after {
+    content: "";
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--text);
+    transition: transform 0.15s ease, background 0.15s ease;
+  }
+  #thinkingToggle:checked, #bookModeToggle:checked { background: var(--accent); }
+  #thinkingToggle:checked::after, #bookModeToggle:checked::after {
+    transform: translateX(18px);
+    background: #0E1512;
+  }
+
+  .count-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin: 22px 0 10px;
+  }
+  .count-row span:first-child {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    font-family: 'IBM Plex Mono', monospace;
+  }
+  .count-row span:last-child {
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .thumbs {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+  .thumb {
+    position: relative;
+    aspect-ratio: 3 / 4;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    background: var(--panel);
+  }
+  .thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    filter: saturate(0.85) brightness(0.95);
+  }
+  .thumb button {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(18,20,23,0.85);
+    color: var(--text);
+    font-size: 12px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .thumb .badge {
+    position: absolute;
+    bottom: 4px;
+    left: 4px;
+    background: rgba(18,20,23,0.85);
+    color: var(--accent);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 999px;
+  }
+
+  .bar {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    padding: 14px 20px calc(14px + env(safe-area-inset-bottom, 0px));
+    background: linear-gradient(180deg, rgba(18,20,23,0) 0%, var(--bg) 35%);
+  }
+  .bar-inner { max-width: 640px; margin: 0 auto; }
+  .grade-btn {
+    width: 100%;
+    padding: 15px;
+    border: none;
+    border-radius: 10px;
+    background: var(--accent);
+    color: #0E1512;
+    font-size: 16px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  .grade-btn:disabled {
+    background: var(--line);
+    color: var(--muted);
+    cursor: not-allowed;
+  }
+  .status {
+    margin-top: 18px;
+    font-size: 14px;
+    color: var(--muted);
+    text-align: center;
+  }
+  .error-box {
+    margin-top: 18px;
+    background: #241A19;
+    border: 1px solid #3D2624;
+    color: var(--bad);
+    padding: 12px 14px;
+    border-radius: 10px;
+    font-size: 14px;
+  }
+  .results {
+    margin-top: 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .result-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 12px 14px;
+  }
+  .letter {
+    flex: 0 0 auto;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: #16201F;
+    color: var(--accent);
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 600;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .letter.unknown { background: var(--line); color: var(--muted); }
+  .result-text { min-width: 0; }
+  .q-num {
+    font-size: 12px;
+    color: var(--muted);
+    margin: 0 0 2px;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+  .a-text {
+    font-size: 14.5px;
+    margin: 0;
+    line-height: 1.4;
+    color: var(--text);
+  }
+  .qn {
+    flex: 0 0 auto;
+    width: 30px;
+    text-align: right;
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 600;
+    font-size: 15px;
+    color: var(--muted);
+  }
+  .result-card.warn { border-color: var(--bad); }
+  .result-card.empty { opacity: 0.45; }
+  .section-label { color: var(--bad); font-size: 13px; margin: 16px 0 2px; }
+  .summary {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-bottom: 4px;
+  }
+  .summary p {
+    flex: 1;
+    margin: 0;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    line-height: 1.7;
+    word-spacing: 2px;
+    color: var(--accent);
+  }
+  .summary button {
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: 999px;
+    padding: 6px 14px;
+    font-size: 13px;
+    font-family: inherit;
+    cursor: pointer;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Practice test</p>
+    <h1>Answer checker</h1>
+    <p class="sub">Photograph up to {{ max_images }} questions and get the correct letter for each one, in order.</p>
+    <a href="{{ url_for('logout') }}" style="font-size:13px;color:var(--muted);text-decoration:underline;">Log out</a>
+  </header>
+
+  <div class="dropzone" id="dropzone">
+    <p>Add photos of your questions, one photo per question</p>
+    <button class="pick-btn" type="button" id="pickBtn">Choose photos</button>
+    <input type="file" id="fileInput" accept="image/*" multiple>
+  </div>
+
+  <label class="toggle-row" id="thinkingRow" for="thinkingToggle">
+    <span>
+      <strong>Extended thinking</strong>
+      <small id="thinkingHint">Off: fastest. On: slower and uses more tokens, may help on hard math.</small>
+    </span>
+    <input type="checkbox" id="thinkingToggle" role="switch" aria-label="Extended thinking">
+  </label>
+
+  <label class="toggle-row" id="bookModeRow" for="bookModeToggle">
+    <span>
+      <strong>Book Mode</strong>
+      <small id="bookModeHint">Off: answer using the normal SAT grader. On: search both SAT books and show matching page references.</small>
+    </span>
+    <input type="checkbox" id="bookModeToggle" role="switch" aria-label="Book Mode">
+  </label>
+
+  <div class="count-row">
+    <span id="countLabel">0 photos added</span>
+    <span id="limitLabel">max {{ max_images }}</span>
+  </div>
+  <div class="thumbs" id="thumbs"></div>
+
+  <div id="statusArea"></div>
+  <div class="results" id="results"></div>
+</div>
+
+<div class="bar">
+  <div class="bar-inner">
+    <button class="grade-btn" id="gradeBtn" disabled>Check my answers</button>
+  </div>
+</div>
+
+<script>
+const MAX_IMAGES = {{ max_images }};
+
+// Adaptive compression settings
+const MAX_UPLOAD_BYTES = 7 * 1024 * 1024; // 7 MB target
+const MIN_QUALITY = 0.76;
+const WEBP_QUALITIES = [0.94, 0.90, 0.86, 0.82, 0.79, MIN_QUALITY];
+const JPEG_QUALITIES = [0.94, 0.90, 0.86, 0.82, 0.79, MIN_QUALITY];
+
+let files = [];
+
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const pickBtn = document.getElementById('pickBtn');
+const thumbs = document.getElementById('thumbs');
+const countLabel = document.getElementById('countLabel');
+const gradeBtn = document.getElementById('gradeBtn');
+const statusArea = document.getElementById('statusArea');
+const resultsEl = document.getElementById('results');
+
+// ---- Extended thinking switch
+const thinkingToggle = document.getElementById('thinkingToggle');
+const thinkingRow = document.getElementById('thinkingRow');
+const thinkingHint = document.getElementById('thinkingHint');
+const THINK_KEY = 'extendedThinking';
+
+function syncThinkingUi() {
+  const on = thinkingToggle.checked;
+  thinkingRow.classList.toggle('on', on);
+  thinkingHint.textContent = on
+    ? 'On: slower and uses more tokens. Stays on until you turn it off.'
+    : 'Off: fastest. On: slower and uses more tokens, may help on hard math.';
+}
+
+try {
+  thinkingToggle.checked = localStorage.getItem(THINK_KEY) === '1';
+} catch (e) {}
+
+syncThinkingUi();
+
+thinkingToggle.addEventListener('change', () => {
+  try {
+    localStorage.setItem(THINK_KEY, thinkingToggle.checked ? '1' : '0');
+  } catch (e) {}
+  syncThinkingUi();
+});
+
+// ---- Optional SAT-book retrieval switch
+const bookModeToggle = document.getElementById('bookModeToggle');
+const bookModeRow = document.getElementById('bookModeRow');
+const bookModeHint = document.getElementById('bookModeHint');
+const BOOK_KEY = 'satBookMode';
+
+function syncBookModeUi() {
+  const on = bookModeToggle.checked;
+  bookModeRow.classList.toggle('on', on);
+  bookModeHint.textContent = on
+    ? 'On: searches both SAT books for each question and displays matching pages. Uses an extra Claude call per question.'
+    : 'Off: answer using the normal SAT grader. Turn on to search both SAT books.';
+}
+
+try {
+  bookModeToggle.checked = localStorage.getItem(BOOK_KEY) === '1';
+} catch (e) {}
+
+syncBookModeUi();
+
+bookModeToggle.addEventListener('change', () => {
+  try {
+    localStorage.setItem(BOOK_KEY, bookModeToggle.checked ? '1' : '0');
+  } catch (e) {}
+  syncBookModeUi();
+});
+
+pickBtn.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', (e) => addFiles(e.target.files));
+
+['dragenter', 'dragover'].forEach(evt =>
+  dropzone.addEventListener(evt, (e) => {
+    e.preventDefault();
+    dropzone.classList.add('drag');
+  })
+);
+
+['dragleave', 'drop'].forEach(evt =>
+  dropzone.addEventListener(evt, (e) => {
+    e.preventDefault();
+    dropzone.classList.remove('drag');
+  })
+);
+
+dropzone.addEventListener('drop', (e) => addFiles(e.dataTransfer.files));
+
+function addFiles(fileList) {
+  const incoming = Array.from(fileList).filter(f => f.type.startsWith('image/'));
+  const room = MAX_IMAGES - files.length;
+
+  if (room <= 0) {
+    setStatus(`You've already added the max of ${MAX_IMAGES} photos.`, true);
+    return;
+  }
+
+  const accepted = incoming.slice(0, room);
+  files = files.concat(accepted);
+
+  // Start compression in the background, one image at a time.
+  accepted.forEach(prepare);
+
+  if (incoming.length > accepted.length) {
+    setStatus(`Only added ${accepted.length}: that's the ${MAX_IMAGES}-photo limit per check.`, true);
+  } else {
+    setStatus('');
+  }
+
+  render();
+  fileInput.value = '';
+}
+
+function removeFile(index) {
+  files.splice(index, 1);
+  render();
+}
+
+// ---- Thumbnail generation
+const thumbCache = new WeakMap();
+
+function makeThumbnail(file, maxDim = 240) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+
+    img.onload = () => {
+      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+      const canvas = document.createElement('canvas');
+
+      canvas.width = Math.max(1, Math.round(img.width * scale));
+      canvas.height = Math.max(1, Math.round(img.height * scale));
+
+      const ctx = canvas.getContext('2d');
+
+      if (!ctx) {
+        URL.revokeObjectURL(url);
+        resolve('');
+        return;
+      }
+
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(url);
+
+      resolve(canvas.toDataURL('image/jpeg', 0.7));
+    };
+
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve('');
+    };
+
+    img.src = url;
+  });
+}
+
+function getThumb(file) {
+  if (!thumbCache.has(file)) {
+    thumbCache.set(file, makeThumbnail(file));
+  }
+  return thumbCache.get(file);
+}
+
+function render() {
+  countLabel.textContent =
+    `${files.length} photo${files.length === 1 ? '' : 's'} added`;
+
+  thumbs.innerHTML = '';
+  gradeBtn.disabled = files.length === 0;
+
+  files.forEach((f, i) => {
+    const div = document.createElement('div');
+    div.className = 'thumb';
+
+    const img = document.createElement('img');
+
+    const badge = document.createElement('span');
+    badge.className = 'badge';
+    badge.textContent = i + 1;
+
+    const btn = document.createElement('button');
+    btn.textContent = '×';
+    btn.onclick = () => removeFile(i);
+
+    div.appendChild(img);
+    div.appendChild(badge);
+    div.appendChild(btn);
+    thumbs.appendChild(div);
+
+    getThumb(f).then((src) => {
+      if (src) img.src = src;
+    });
+  });
+}
+
+function setStatus(msg, isError = false) {
+  statusArea.innerHTML = '';
+  if (!msg) return;
+
+  const div = document.createElement('div');
+  div.className = isError ? 'error-box' : 'status';
+  div.textContent = msg;
+  statusArea.appendChild(div);
+}
+
+// ============================================================
+// ADAPTIVE IMAGE COMPRESSION
+// ============================================================
+
+// Keep original images untouched when they are already small enough
+// and use a format supported by the image API.
+const SUPPORTED_ORIGINAL_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp'
+]);
+
+// Cache each prepared image so retries do not compress it again.
+const prepared = new WeakMap();
+
+// Compress sequentially to reduce memory usage on mobile browsers.
+let prepChain = Promise.resolve();
+
+function canvasToBlob(canvas, type, quality) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        reject(new Error('The browser could not encode this image.'));
+        return;
+      }
+      resolve(blob);
+    }, type, quality);
+  });
+}
+
+function getOutputFilename(originalName, mimeType) {
+  const base = originalName.replace(/\.[^.]+$/, '');
+
+  if (mimeType === 'image/webp') return `${base}.webp`;
+  if (mimeType === 'image/png') return `${base}.png`;
+
+  return `${base}.jpg`;
+}
+
+async function encodeAtQuality(canvas, mimeType, quality) {
+  const blob = await canvasToBlob(canvas, mimeType, quality);
+
+  // Some browsers may fall back to PNG if a requested format is unsupported.
+  if (blob.type !== mimeType) {
+    return null;
+  }
+
+  return blob;
+}
+
+async function compressImage(file) {
+  // Preserve the original file exactly when it is already within the limit
+  // and its format is supported.
+  if (
+    file.size <= MAX_UPLOAD_BYTES &&
+    SUPPORTED_ORIGINAL_TYPES.has(file.type)
+  ) {
+    return {
+      blob: file,
+      filename: file.name,
+      compressed: false
+    };
+  }
+
+  if (typeof createImageBitmap !== 'function') {
+    throw new Error(
+      'This browser cannot process this image. Try a modern version of Chrome, Edge, or Safari.'
+    );
+  }
+
+  let bitmap;
+
+  try {
+    bitmap = await createImageBitmap(file, {
+      imageOrientation: 'from-image'
+    });
+
+    const originalWidth = bitmap.width;
+    const originalHeight = bitmap.height;
+
+    if (!originalWidth || !originalHeight) {
+      throw new Error('Could not read the image dimensions.');
+    }
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+
+    if (!ctx) {
+      throw new Error('Could not initialize image compression.');
+    }
+
+    // First attempt: preserve the original dimensions.
+    let width = originalWidth;
+    let height = originalHeight;
+
+    // Prefer WebP, then JPEG.
+    const formats = [
+      {
+        type: 'image/webp',
+        qualities: WEBP_QUALITIES
+      },
+      {
+        type: 'image/jpeg',
+        qualities: JPEG_QUALITIES
+      }
+    ];
+
+    for (const format of formats) {
+      canvas.width = width;
+      canvas.height = height;
+
+      ctx.clearRect(0, 0, width, height);
+      ctx.drawImage(bitmap, 0, 0, width, height);
+
+      for (const quality of format.qualities) {
+        const blob = await encodeAtQuality(
+          canvas,
+          format.type,
+          quality
+        );
+
+        if (!blob) break;
+
+        if (blob.size <= MAX_UPLOAD_BYTES) {
+          return {
+            blob,
+            filename: getOutputFilename(file.name, blob.type),
+            compressed: true
+          };
+        }
+      }
+    }
+
+    // Last resort: reduce dimensions gradually.
+    // This only happens if quality reduction alone cannot reach the target.
+    const scaleSteps = [0.90, 0.80, 0.70, 0.60];
+
+    for (const scale of scaleSteps) {
+      width = Math.max(1, Math.round(originalWidth * scale));
+      height = Math.max(1, Math.round(originalHeight * scale));
+
+      canvas.width = width;
+      canvas.height = height;
+
+      ctx.clearRect(0, 0, width, height);
+      ctx.drawImage(bitmap, 0, 0, width, height);
+
+      for (const format of formats) {
+        for (const quality of format.qualities) {
+          const blob = await encodeAtQuality(
+            canvas,
+            format.type,
+            quality
+          );
+
+          if (!blob) break;
+
+          if (blob.size <= MAX_UPLOAD_BYTES) {
+            return {
+              blob,
+              filename: getOutputFilename(file.name, blob.type),
+              compressed: true
+            };
+          }
+        }
+      }
+    }
+
+    throw new Error(
+      `This image is too large to reduce below ${formatMB(MAX_UPLOAD_BYTES)} without more aggressive quality or resolution reduction.`
+    );
+
+  } finally {
+    if (bitmap) bitmap.close();
+  }
+}
+
+function formatMB(bytes) {
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function prepare(file) {
+  if (!prepared.has(file)) {
+    const p = prepChain.then(() => compressImage(file));
+
+    // Keep the queue usable even if one image fails.
+    prepChain = p.catch(() => {});
+
+    prepared.set(file, p);
+  }
+
+  return prepared.get(file);
+}
+
+// ============================================================
+// SEND IMAGE TO FLASK
+// ============================================================
+
+async function gradeOne(file, thinking, bookMode, attempt = 0) {
+  try {
+    const preparedImage = await prepare(file);
+
+    const fd = new FormData();
+
+    fd.append(
+      'image',
+      preparedImage.blob,
+      preparedImage.filename
+    );
+
+    fd.append('thinking', thinking ? '1' : '0');
+    fd.append('book_mode', bookMode ? '1' : '0');
+
+    const res = await fetch('/api/grade_one', {
+      method: 'POST',
+      body: fd
+    });
+
+    let data;
+
+    try {
+      data = await res.json();
+    } catch {
+      throw new Error(`Server returned an invalid response (${res.status}).`);
+    }
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Something went wrong.');
+    }
+
+    return data.result;
+
+  } catch (err) {
+    if (attempt < 2) {
+      await new Promise(r =>
+        setTimeout(r, 700 * (attempt + 1))
+      );
+
+      return gradeOne(file, thinking, bookMode, attempt + 1);
+    }
+
+    throw err;
+  }
+}
+
+// ---- Slotting: the question number read from the page decides the position.
+function parseNum(v) {
+  const m = String(v ?? '').match(/\d+/);
+  return m ? parseInt(m[0], 10) : null;
+}
+
+function rowHtml({ num, r, photo, cls = '' }) {
+  const unknown = !r || !r.answer || r.answer === '?';
+
+  return `<div class="result-card ${cls}">
+    <div class="qn">${num ?? '?'}</div>
+    <div class="letter ${unknown ? 'unknown' : ''}">${escapeHtml(r?.answer || '?')}</div>
+    <div class="result-text">
+      <p class="a-text">${r?.answer_text ? escapeHtml(r.answer_text) : ''}</p>
+      <p class="q-num">photo ${photo}</p>
+      ${Array.isArray(r?.sources) && r.sources.length
+        ? `<p class="q-num source-list">Sources: ${r.sources.map(s => `${escapeHtml(s.book || 'Book')} · p. ${escapeHtml(String(s.page ?? '?'))}`).join('  |  ')}</p>`
+        : ''}
+    </div>
+  </div>`;
+}
+
+function renderBoard(items, total, finished) {
+  const slots = new Map();
+  const unplaced = [];
+
+  items.forEach(({ i, r, error }) => {
+    const num = r ? parseNum(r.question_number) : null;
+
+    if (num === null) {
+      unplaced.push({
+        r: r || { answer: '?', answer_text: error },
+        photo: i + 1
+      });
+    } else {
+      if (!slots.has(num)) slots.set(num, []);
+      slots.get(num).push({ r, photo: i + 1 });
+    }
+  });
+
+  let html = '';
+
+  if (slots.size) {
+    const nums = [...slots.keys()];
+    const lo = Math.min(...nums);
+    const hi = Math.max(...nums);
+
+    for (let n = lo; n <= hi; n++) {
+      const list = slots.get(n);
+
+      if (!list) {
+        html += `<div class="result-card empty">
+          <div class="qn">${n}</div>
+          <div class="letter unknown">–</div>
+          <div class="result-text">
+            <p class="a-text">${finished ? 'no photo for this number' : 'waiting…'}</p>
+          </div>
+        </div>`;
+      } else if (list.length === 1) {
+        html += rowHtml({ num: n, ...list[0] });
+      } else {
+        list.forEach(x => {
+          html += rowHtml({ num: n, ...x, cls: 'warn' });
+        });
+      }
+    }
+  }
+
+  if (unplaced.length) {
+    html += `<p class="section-label">Couldn't read the question number</p>`;
+
+    unplaced.forEach(x => {
+      html += rowHtml({ num: null, ...x, cls: 'warn' });
+    });
+  }
+
+  let summary = '';
+
+  if (finished && slots.size) {
+    const line = [...slots.keys()]
+      .sort((a, b) => a - b)
+      .map(n => `${n}${slots.get(n)[0].r.answer || '?'}`)
+      .join('  ');
+
+    summary = `<div class="summary">
+      <p>${escapeHtml(line)}</p>
+      <button type="button" id="copyBtn">Copy</button>
+    </div>`;
+
+    window.__summaryText = [...slots.keys()]
+      .sort((a, b) => a - b)
+      .map(n => `${n}. ${slots.get(n)[0].r.answer || '?'}`)
+      .join('\n');
+  }
+
+  resultsEl.innerHTML = summary + html;
+
+  const cb = document.getElementById('copyBtn');
+
+  if (cb) {
+    cb.onclick = () =>
+      navigator.clipboard.writeText(window.__summaryText)
+        .then(() => {
+          cb.textContent = 'Copied';
+        });
+  }
+}
+
+// ============================================================
+// GRADE ALL QUESTIONS
+// ============================================================
+
+gradeBtn.addEventListener('click', async () => {
+  if (files.length === 0) return;
+
+  const batch = files.slice();
+  const useThinking = thinkingToggle.checked;
+  const useBookMode = bookModeToggle.checked;
+
+  gradeBtn.disabled = true;
+  gradeBtn.textContent = 'Checking…';
+  resultsEl.innerHTML = '';
+
+  const t0 = performance.now();
+  const items = [];
+
+  setStatus(
+    `0 / ${batch.length} done${useThinking ? ' (extended thinking on)' : ''}${useBookMode ? ' (Book Mode on)' : ''}`
+  );
+
+  // Process at most 5 grading requests concurrently.
+  const BATCH_SIZE = 5;
+
+  for (let start = 0; start < batch.length; start += BATCH_SIZE) {
+    const currentBatch = batch.slice(start, start + BATCH_SIZE);
+
+    await Promise.all(
+      currentBatch.map(async (f, offset) => {
+        const i = start + offset;
+
+        try {
+          items.push({
+            i,
+            r: await gradeOne(f, useThinking, useBookMode)
+          });
+        } catch (err) {
+          items.push({
+            i,
+            error: err.message
+          });
+        }
+
+        renderBoard(items, batch.length, false);
+
+        setStatus(
+          `${items.length} / ${batch.length} done${useThinking ? ' (extended thinking on)' : ''}${useBookMode ? ' (Book Mode on)' : ''}`
+        );
+      })
+    );
+  }
+
+  renderBoard(items, batch.length, true);
+
+  setStatus(
+    `Finished in ${((performance.now() - t0) / 1000).toFixed(1)}s`
+  );
+
+  gradeBtn.disabled = files.length === 0;
+  gradeBtn.textContent = 'Check my answers';
+});
+
+function escapeHtml(s) {
+  const div = document.createElement('div');
+  div.textContent = s;
+  return div.innerHTML;
+}
+</script>
+</body>
+</html>

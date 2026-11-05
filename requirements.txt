@@ -1,0 +1,6 @@
+flask>=3.0
+anthropic>=0.40
+pillow>=10.0
+pillow-heif>=0.15
+gunicorn>=22.0
+rank-bm25>=0.2.2
