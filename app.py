@@ -84,6 +84,18 @@ Return ONLY a valid JSON object (no markdown, no text outside the JSON) with
 these exact keys in this exact order:
 {"question_number":"17","work":"...","answer":"C","answer_text":"...","explanation":"..."}
 
+JSON SAFETY (critical)
+- Output must be parseable by a strict JSON parser. No code fences, no text
+  before or after the object.
+- Inside string values, never use double quotes. Use single quotes when
+  quoting text from the question.
+- Write work as ONE line of plain text. No line breaks, no tabs. Separate
+  steps with " | ".
+- No backslashes and no LaTeX. Write fractions as 3/4, powers as x^2,
+  square roots as sqrt(x).
+- Keep work under about 250 words so the response is never cut off.
+- The last character of your response must be the closing brace.
+
 FIELD RULES
 - question_number: the printed question number, digits only, or "?".
   Never infer it from image order.
