@@ -304,7 +304,7 @@ def grade_one():
 
         raw_image = f.read()
 
-        data = to_small_jpeg(raw_image)
+        data = raw_image
 
         encoded_image = base64.b64encode(
             data
