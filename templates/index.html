@@ -35,9 +35,7 @@
     margin: 0 auto;
     padding: 28px 20px 140px;
   }
-  header {
-    margin-bottom: 24px;
-  }
+  header { margin-bottom: 24px; }
   .eyebrow {
     color: var(--accent);
     font-family: 'IBM Plex Mono', monospace;
@@ -60,7 +58,6 @@
     margin: 0;
     max-width: 48ch;
   }
-
   .dropzone {
     margin-top: 24px;
     border: 1px solid var(--line);
@@ -93,7 +90,6 @@
   }
   input[type="file"] { display: none; }
 
-  /* ---- Extended thinking switch ---- */
   .toggle-row {
     display: flex;
     justify-content: space-between;
@@ -167,7 +163,6 @@
     font-size: 13px;
     color: var(--muted);
   }
-
   .thumbs {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
@@ -216,9 +211,7 @@
 
   .bar {
     position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
+    left: 0; right: 0; bottom: 0;
     padding: 14px 20px calc(14px + env(safe-area-inset-bottom, 0px));
     background: linear-gradient(180deg, rgba(18,20,23,0) 0%, var(--bg) 35%);
   }
@@ -240,7 +233,6 @@
     color: var(--muted);
     cursor: not-allowed;
   }
-
   .status {
     margin-top: 18px;
     font-size: 14px;
@@ -256,7 +248,6 @@
     border-radius: 10px;
     font-size: 14px;
   }
-
   .results {
     margin-top: 28px;
     display: flex;
@@ -286,10 +277,7 @@
     align-items: center;
     justify-content: center;
   }
-  .letter.unknown {
-    background: var(--line);
-    color: var(--muted);
-  }
+  .letter.unknown { background: var(--line); color: var(--muted); }
   .result-text { min-width: 0; }
   .q-num {
     font-size: 12px;
@@ -314,11 +302,7 @@
   }
   .result-card.warn { border-color: var(--bad); }
   .result-card.empty { opacity: 0.45; }
-  .section-label {
-    color: var(--bad);
-    font-size: 13px;
-    margin: 16px 0 2px;
-  }
+  .section-label { color: var(--bad); font-size: 13px; margin: 16px 0 2px; }
   .summary {
     display: flex;
     gap: 12px;
@@ -350,7 +334,6 @@
   }
 </style>
 </head>
-
 <body>
 <div class="wrap">
   <header>
@@ -378,7 +361,6 @@
     <span id="countLabel">0 photos added</span>
     <span id="limitLabel">max {{ max_images }}</span>
   </div>
-
   <div class="thumbs" id="thumbs"></div>
 
   <div id="statusArea"></div>
@@ -393,6 +375,13 @@
 
 <script>
 const MAX_IMAGES = {{ max_images }};
+
+// Adaptive compression settings
+const MAX_UPLOAD_BYTES = 7 * 1024 * 1024; // 7 MB target
+const MIN_QUALITY = 0.76;
+const WEBP_QUALITIES = [0.94, 0.90, 0.86, 0.82, 0.79, MIN_QUALITY];
+const JPEG_QUALITIES = [0.94, 0.90, 0.86, 0.82, 0.79, MIN_QUALITY];
+
 let files = [];
 
 const dropzone = document.getElementById('dropzone');
@@ -404,7 +393,7 @@ const gradeBtn = document.getElementById('gradeBtn');
 const statusArea = document.getElementById('statusArea');
 const resultsEl = document.getElementById('results');
 
-// ---- Extended thinking switch: saved in this browser until you turn it off.
+// ---- Extended thinking switch
 const thinkingToggle = document.getElementById('thinkingToggle');
 const thinkingRow = document.getElementById('thinkingRow');
 const thinkingHint = document.getElementById('thinkingHint');
@@ -412,9 +401,7 @@ const THINK_KEY = 'extendedThinking';
 
 function syncThinkingUi() {
   const on = thinkingToggle.checked;
-
   thinkingRow.classList.toggle('on', on);
-
   thinkingHint.textContent = on
     ? 'On: slower and uses more tokens. Stays on until you turn it off.'
     : 'Off: fastest. On: slower and uses more tokens, may help on hard math.';
@@ -428,21 +415,13 @@ syncThinkingUi();
 
 thinkingToggle.addEventListener('change', () => {
   try {
-    localStorage.setItem(
-      THINK_KEY,
-      thinkingToggle.checked ? '1' : '0'
-    );
+    localStorage.setItem(THINK_KEY, thinkingToggle.checked ? '1' : '0');
   } catch (e) {}
-
   syncThinkingUi();
 });
 
-// ---- File selection
 pickBtn.addEventListener('click', () => fileInput.click());
-
-fileInput.addEventListener('change', (e) => {
-  addFiles(e.target.files);
-});
+fileInput.addEventListener('change', (e) => addFiles(e.target.files));
 
 ['dragenter', 'dragover'].forEach(evt =>
   dropzone.addEventListener(evt, (e) => {
@@ -458,34 +437,25 @@ fileInput.addEventListener('change', (e) => {
   })
 );
 
-dropzone.addEventListener('drop', (e) => {
-  addFiles(e.dataTransfer.files);
-});
+dropzone.addEventListener('drop', (e) => addFiles(e.dataTransfer.files));
 
 function addFiles(fileList) {
-  const incoming = Array.from(fileList).filter(
-    f => f.type.startsWith('image/')
-  );
-
+  const incoming = Array.from(fileList).filter(f => f.type.startsWith('image/'));
   const room = MAX_IMAGES - files.length;
 
   if (room <= 0) {
-    setStatus(
-      `You've already added the max of ${MAX_IMAGES} photos.`,
-      true
-    );
+    setStatus(`You've already added the max of ${MAX_IMAGES} photos.`, true);
     return;
   }
 
   const accepted = incoming.slice(0, room);
-
   files = files.concat(accepted);
 
+  // Start compression in the background, one image at a time.
+  accepted.forEach(prepare);
+
   if (incoming.length > accepted.length) {
-    setStatus(
-      `Only added ${accepted.length}: that's the ${MAX_IMAGES}-photo limit per check.`,
-      true
-    );
+    setStatus(`Only added ${accepted.length}: that's the ${MAX_IMAGES}-photo limit per check.`, true);
   } else {
     setStatus('');
   }
@@ -499,8 +469,7 @@ function removeFile(index) {
   render();
 }
 
-// ---- Thumbnail generation ONLY.
-// These compressed previews are never uploaded to Claude.
+// ---- Thumbnail generation
 const thumbCache = new WeakMap();
 
 function makeThumbnail(file, maxDim = 240) {
@@ -509,31 +478,21 @@ function makeThumbnail(file, maxDim = 240) {
     const url = URL.createObjectURL(file);
 
     img.onload = () => {
-      const scale = Math.min(
-        1,
-        maxDim / Math.max(img.width, img.height)
-      );
-
+      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
       const canvas = document.createElement('canvas');
 
-      canvas.width = Math.max(
-        1,
-        Math.round(img.width * scale)
-      );
+      canvas.width = Math.max(1, Math.round(img.width * scale));
+      canvas.height = Math.max(1, Math.round(img.height * scale));
 
-      canvas.height = Math.max(
-        1,
-        Math.round(img.height * scale)
-      );
+      const ctx = canvas.getContext('2d');
 
-      canvas.getContext('2d').drawImage(
-        img,
-        0,
-        0,
-        canvas.width,
-        canvas.height
-      );
+      if (!ctx) {
+        URL.revokeObjectURL(url);
+        resolve('');
+        return;
+      }
 
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       URL.revokeObjectURL(url);
 
       resolve(canvas.toDataURL('image/jpeg', 0.7));
@@ -552,7 +511,6 @@ function getThumb(file) {
   if (!thumbCache.has(file)) {
     thumbCache.set(file, makeThumbnail(file));
   }
-
   return thumbCache.get(file);
 }
 
@@ -580,7 +538,6 @@ function render() {
     div.appendChild(img);
     div.appendChild(badge);
     div.appendChild(btn);
-
     thumbs.appendChild(div);
 
     getThumb(f).then((src) => {
@@ -591,25 +548,224 @@ function render() {
 
 function setStatus(msg, isError = false) {
   statusArea.innerHTML = '';
-
   if (!msg) return;
 
   const div = document.createElement('div');
-
   div.className = isError ? 'error-box' : 'status';
   div.textContent = msg;
-
   statusArea.appendChild(div);
 }
 
-// ---- Upload original image without resizing or recompressing.
+// ============================================================
+// ADAPTIVE IMAGE COMPRESSION
+// ============================================================
+
+// Keep original images untouched when they are already small enough
+// and use a format supported by the image API.
+const SUPPORTED_ORIGINAL_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp'
+]);
+
+// Cache each prepared image so retries do not compress it again.
+const prepared = new WeakMap();
+
+// Compress sequentially to reduce memory usage on mobile browsers.
+let prepChain = Promise.resolve();
+
+function canvasToBlob(canvas, type, quality) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        reject(new Error('The browser could not encode this image.'));
+        return;
+      }
+      resolve(blob);
+    }, type, quality);
+  });
+}
+
+function getOutputFilename(originalName, mimeType) {
+  const base = originalName.replace(/\.[^.]+$/, '');
+
+  if (mimeType === 'image/webp') return `${base}.webp`;
+  if (mimeType === 'image/png') return `${base}.png`;
+
+  return `${base}.jpg`;
+}
+
+async function encodeAtQuality(canvas, mimeType, quality) {
+  const blob = await canvasToBlob(canvas, mimeType, quality);
+
+  // Some browsers may fall back to PNG if a requested format is unsupported.
+  if (blob.type !== mimeType) {
+    return null;
+  }
+
+  return blob;
+}
+
+async function compressImage(file) {
+  // Preserve the original file exactly when it is already within the limit
+  // and its format is supported.
+  if (
+    file.size <= MAX_UPLOAD_BYTES &&
+    SUPPORTED_ORIGINAL_TYPES.has(file.type)
+  ) {
+    return {
+      blob: file,
+      filename: file.name,
+      compressed: false
+    };
+  }
+
+  if (typeof createImageBitmap !== 'function') {
+    throw new Error(
+      'This browser cannot process this image. Try a modern version of Chrome, Edge, or Safari.'
+    );
+  }
+
+  let bitmap;
+
+  try {
+    bitmap = await createImageBitmap(file, {
+      imageOrientation: 'from-image'
+    });
+
+    const originalWidth = bitmap.width;
+    const originalHeight = bitmap.height;
+
+    if (!originalWidth || !originalHeight) {
+      throw new Error('Could not read the image dimensions.');
+    }
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+
+    if (!ctx) {
+      throw new Error('Could not initialize image compression.');
+    }
+
+    // First attempt: preserve the original dimensions.
+    let width = originalWidth;
+    let height = originalHeight;
+
+    // Prefer WebP, then JPEG.
+    const formats = [
+      {
+        type: 'image/webp',
+        qualities: WEBP_QUALITIES
+      },
+      {
+        type: 'image/jpeg',
+        qualities: JPEG_QUALITIES
+      }
+    ];
+
+    for (const format of formats) {
+      canvas.width = width;
+      canvas.height = height;
+
+      ctx.clearRect(0, 0, width, height);
+      ctx.drawImage(bitmap, 0, 0, width, height);
+
+      for (const quality of format.qualities) {
+        const blob = await encodeAtQuality(
+          canvas,
+          format.type,
+          quality
+        );
+
+        if (!blob) break;
+
+        if (blob.size <= MAX_UPLOAD_BYTES) {
+          return {
+            blob,
+            filename: getOutputFilename(file.name, blob.type),
+            compressed: true
+          };
+        }
+      }
+    }
+
+    // Last resort: reduce dimensions gradually.
+    // This only happens if quality reduction alone cannot reach the target.
+    const scaleSteps = [0.90, 0.80, 0.70, 0.60];
+
+    for (const scale of scaleSteps) {
+      width = Math.max(1, Math.round(originalWidth * scale));
+      height = Math.max(1, Math.round(originalHeight * scale));
+
+      canvas.width = width;
+      canvas.height = height;
+
+      ctx.clearRect(0, 0, width, height);
+      ctx.drawImage(bitmap, 0, 0, width, height);
+
+      for (const format of formats) {
+        for (const quality of format.qualities) {
+          const blob = await encodeAtQuality(
+            canvas,
+            format.type,
+            quality
+          );
+
+          if (!blob) break;
+
+          if (blob.size <= MAX_UPLOAD_BYTES) {
+            return {
+              blob,
+              filename: getOutputFilename(file.name, blob.type),
+              compressed: true
+            };
+          }
+        }
+      }
+    }
+
+    throw new Error(
+      `This image is too large to reduce below ${formatMB(MAX_UPLOAD_BYTES)} without more aggressive quality or resolution reduction.`
+    );
+
+  } finally {
+    if (bitmap) bitmap.close();
+  }
+}
+
+function formatMB(bytes) {
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function prepare(file) {
+  if (!prepared.has(file)) {
+    const p = prepChain.then(() => compressImage(file));
+
+    // Keep the queue usable even if one image fails.
+    prepChain = p.catch(() => {});
+
+    prepared.set(file, p);
+  }
+
+  return prepared.get(file);
+}
+
+// ============================================================
+// SEND IMAGE TO FLASK
+// ============================================================
+
 async function gradeOne(file, thinking, attempt = 0) {
   try {
+    const preparedImage = await prepare(file);
+
     const fd = new FormData();
 
-    // Send the original File object directly.
-    // No canvas, resizing, JPEG conversion, or quality reduction.
-    fd.append('image', file, file.name);
+    fd.append(
+      'image',
+      preparedImage.blob,
+      preparedImage.filename
+    );
 
     fd.append('thinking', thinking ? '1' : '0');
 
@@ -618,7 +774,13 @@ async function gradeOne(file, thinking, attempt = 0) {
       body: fd
     });
 
-    const data = await res.json();
+    let data;
+
+    try {
+      data = await res.json();
+    } catch {
+      throw new Error(`Server returned an invalid response (${res.status}).`);
+    }
 
     if (!res.ok) {
       throw new Error(data.error || 'Something went wrong.');
@@ -640,16 +802,13 @@ async function gradeOne(file, thinking, attempt = 0) {
 }
 
 // ---- Slotting: the question number read from the page decides the position.
-// The photo order is ignored completely.
 function parseNum(v) {
   const m = String(v ?? '').match(/\d+/);
-
   return m ? parseInt(m[0], 10) : null;
 }
 
 function rowHtml({ num, r, photo, cls = '' }) {
-  const unknown =
-    !r || !r.answer || r.answer === '?';
+  const unknown = !r || !r.answer || r.answer === '?';
 
   return `<div class="result-card ${cls}">
     <div class="qn">${num ?? '?'}</div>
@@ -666,27 +825,16 @@ function renderBoard(items, total, finished) {
   const unplaced = [];
 
   items.forEach(({ i, r, error }) => {
-    const num = r
-      ? parseNum(r.question_number)
-      : null;
+    const num = r ? parseNum(r.question_number) : null;
 
     if (num === null) {
       unplaced.push({
-        r: r || {
-          answer: '?',
-          answer_text: error
-        },
+        r: r || { answer: '?', answer_text: error },
         photo: i + 1
       });
     } else {
-      if (!slots.has(num)) {
-        slots.set(num, []);
-      }
-
-      slots.get(num).push({
-        r,
-        photo: i + 1
-      });
+      if (!slots.has(num)) slots.set(num, []);
+      slots.get(num).push({ r, photo: i + 1 });
     }
   });
 
@@ -694,7 +842,6 @@ function renderBoard(items, total, finished) {
 
   if (slots.size) {
     const nums = [...slots.keys()];
-
     const lo = Math.min(...nums);
     const hi = Math.max(...nums);
 
@@ -706,39 +853,24 @@ function renderBoard(items, total, finished) {
           <div class="qn">${n}</div>
           <div class="letter unknown">–</div>
           <div class="result-text">
-            <p class="a-text">${finished
-              ? 'no photo for this number'
-              : 'waiting…'}</p>
+            <p class="a-text">${finished ? 'no photo for this number' : 'waiting…'}</p>
           </div>
         </div>`;
       } else if (list.length === 1) {
-        html += rowHtml({
-          num: n,
-          ...list[0]
-        });
+        html += rowHtml({ num: n, ...list[0] });
       } else {
         list.forEach(x => {
-          html += rowHtml({
-            num: n,
-            ...x,
-            cls: 'warn'
-          });
+          html += rowHtml({ num: n, ...x, cls: 'warn' });
         });
       }
     }
   }
 
   if (unplaced.length) {
-    html += `<p class="section-label">
-      Couldn't read the question number
-    </p>`;
+    html += `<p class="section-label">Couldn't read the question number</p>`;
 
     unplaced.forEach(x => {
-      html += rowHtml({
-        num: null,
-        ...x,
-        cls: 'warn'
-      });
+      html += rowHtml({ num: null, ...x, cls: 'warn' });
     });
   }
 
@@ -747,9 +879,7 @@ function renderBoard(items, total, finished) {
   if (finished && slots.size) {
     const line = [...slots.keys()]
       .sort((a, b) => a - b)
-      .map(n =>
-        `${n}${slots.get(n)[0].r.answer || '?'}`
-      )
+      .map(n => `${n}${slots.get(n)[0].r.answer || '?'}`)
       .join('  ');
 
     summary = `<div class="summary">
@@ -759,9 +889,7 @@ function renderBoard(items, total, finished) {
 
     window.__summaryText = [...slots.keys()]
       .sort((a, b) => a - b)
-      .map(n =>
-        `${n}. ${slots.get(n)[0].r.answer || '?'}`
-      )
+      .map(n => `${n}. ${slots.get(n)[0].r.answer || '?'}`)
       .join('\n');
   }
 
@@ -778,41 +906,32 @@ function renderBoard(items, total, finished) {
   }
 }
 
-// ---- Main grading process
+// ============================================================
+// GRADE ALL QUESTIONS
+// ============================================================
+
 gradeBtn.addEventListener('click', async () => {
   if (files.length === 0) return;
 
   const batch = files.slice();
-
-  // Read the switch once so the whole batch uses the same setting.
   const useThinking = thinkingToggle.checked;
 
   gradeBtn.disabled = true;
   gradeBtn.textContent = 'Checking…';
-
   resultsEl.innerHTML = '';
 
   const t0 = performance.now();
   const items = [];
 
   setStatus(
-    `0 / ${batch.length} done${useThinking
-      ? ' (extended thinking on)'
-      : ''}`
+    `0 / ${batch.length} done${useThinking ? ' (extended thinking on)' : ''}`
   );
 
-  // Process at most 5 questions at a time.
+  // Process at most 5 grading requests concurrently.
   const BATCH_SIZE = 5;
 
-  for (
-    let start = 0;
-    start < batch.length;
-    start += BATCH_SIZE
-  ) {
-    const currentBatch = batch.slice(
-      start,
-      start + BATCH_SIZE
-    );
+  for (let start = 0; start < batch.length; start += BATCH_SIZE) {
+    const currentBatch = batch.slice(start, start + BATCH_SIZE);
 
     await Promise.all(
       currentBatch.map(async (f, offset) => {
@@ -830,26 +949,16 @@ gradeBtn.addEventListener('click', async () => {
           });
         }
 
-        renderBoard(
-          items,
-          batch.length,
-          false
-        );
+        renderBoard(items, batch.length, false);
 
         setStatus(
-          `${items.length} / ${batch.length} done${useThinking
-            ? ' (extended thinking on)'
-            : ''}`
+          `${items.length} / ${batch.length} done${useThinking ? ' (extended thinking on)' : ''}`
         );
       })
     );
   }
 
-  renderBoard(
-    items,
-    batch.length,
-    true
-  );
+  renderBoard(items, batch.length, true);
 
   setStatus(
     `Finished in ${((performance.now() - t0) / 1000).toFixed(1)}s`
@@ -861,9 +970,7 @@ gradeBtn.addEventListener('click', async () => {
 
 function escapeHtml(s) {
   const div = document.createElement('div');
-
   div.textContent = s;
-
   return div.innerHTML;
 }
 </script>
