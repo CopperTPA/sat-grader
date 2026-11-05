@@ -92,6 +92,64 @@
   }
   input[type="file"] { display: none; }
 
+  /* ---- Extended thinking switch ---- */
+  .toggle-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    margin-top: 12px;
+    padding: 12px 14px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: border-color 0.15s ease;
+  }
+  .toggle-row.on { border-color: var(--accent); }
+  .toggle-row strong {
+    display: block;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .toggle-row small {
+    display: block;
+    margin-top: 2px;
+    color: var(--muted);
+    font-size: 12.5px;
+    line-height: 1.4;
+  }
+  #thinkingToggle {
+    -webkit-appearance: none;
+    appearance: none;
+    flex: 0 0 auto;
+    width: 42px;
+    height: 24px;
+    margin: 0;
+    border-radius: 999px;
+    background: var(--line);
+    position: relative;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+  #thinkingToggle::after {
+    content: "";
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--text);
+    transition: transform 0.15s ease, background 0.15s ease;
+  }
+  #thinkingToggle:checked { background: var(--accent); }
+  #thinkingToggle:checked::after {
+    transform: translateX(18px);
+    background: #0E1512;
+  }
+
   .count-row {
     display: flex;
     justify-content: space-between;
@@ -247,6 +305,14 @@
     <input type="file" id="fileInput" accept="image/*" multiple>
   </div>
 
+  <label class="toggle-row" id="thinkingRow" for="thinkingToggle">
+    <span>
+      <strong>Extended thinking</strong>
+      <small id="thinkingHint">Off: fastest. On: slower and uses more tokens, may help on hard math.</small>
+    </span>
+    <input type="checkbox" id="thinkingToggle" role="switch" aria-label="Extended thinking">
+  </label>
+
   <div class="count-row">
     <span id="countLabel">0 photos added</span>
     <span id="limitLabel">max {{ max_images }}</span>
@@ -275,6 +341,28 @@ const countLabel = document.getElementById('countLabel');
 const gradeBtn = document.getElementById('gradeBtn');
 const statusArea = document.getElementById('statusArea');
 const resultsEl = document.getElementById('results');
+
+// ---- Extended thinking switch: saved in this browser until you turn it off.
+const thinkingToggle = document.getElementById('thinkingToggle');
+const thinkingRow = document.getElementById('thinkingRow');
+const thinkingHint = document.getElementById('thinkingHint');
+const THINK_KEY = 'extendedThinking';
+
+function syncThinkingUi() {
+  const on = thinkingToggle.checked;
+  thinkingRow.classList.toggle('on', on);
+  thinkingHint.textContent = on
+    ? 'On: slower and uses more tokens. Stays on until you turn it off.'
+    : 'Off: fastest. On: slower and uses more tokens, may help on hard math.';
+}
+
+try { thinkingToggle.checked = localStorage.getItem(THINK_KEY) === '1'; } catch (e) {}
+syncThinkingUi();
+
+thinkingToggle.addEventListener('change', () => {
+  try { localStorage.setItem(THINK_KEY, thinkingToggle.checked ? '1' : '0'); } catch (e) {}
+  syncThinkingUi();
+});
 
 pickBtn.addEventListener('click', () => fileInput.click());
 fileInput.addEventListener('change', (e) => addFiles(e.target.files));
@@ -397,11 +485,12 @@ function prepare(file) {
   return prepared.get(file);
 }
 
-async function gradeOne(file, attempt = 0) {
+async function gradeOne(file, thinking, attempt = 0) {
   try {
     const blob = await prepare(file);
     const fd = new FormData();
     fd.append('image', blob, 'q.jpg');
+    fd.append('thinking', thinking ? '1' : '0');
     const res = await fetch('/api/grade_one', { method: 'POST', body: fd });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Something went wrong.');
@@ -409,7 +498,7 @@ async function gradeOne(file, attempt = 0) {
   } catch (err) {
     if (attempt < 2) {
       await new Promise(r => setTimeout(r, 700 * (attempt + 1)));
-      return gradeOne(file, attempt + 1);
+      return gradeOne(file, thinking, attempt + 1);
     }
     throw err;
   }
@@ -487,12 +576,14 @@ function renderBoard(items, total, finished) {
 gradeBtn.addEventListener('click', async () => {
   if (files.length === 0) return;
   const batch = files.slice();
+  // Read the switch once so the whole batch uses the same setting.
+  const useThinking = thinkingToggle.checked;
   gradeBtn.disabled = true;
   gradeBtn.textContent = 'Checking…';
   resultsEl.innerHTML = '';
   const t0 = performance.now();
   const items = [];
-  setStatus(`0 / ${batch.length} done`);
+  setStatus(`0 / ${batch.length} done${useThinking ? ' (extended thinking on)' : ''}`);
 
   // Process at most 5 questions at a time.
   const BATCH_SIZE = 5;
@@ -504,13 +595,13 @@ gradeBtn.addEventListener('click', async () => {
       const i = start + offset;
 
       try {
-        items.push({ i, r: await gradeOne(f) });
+        items.push({ i, r: await gradeOne(f, useThinking) });
       } catch (err) {
         items.push({ i, error: err.message });
       }
 
       renderBoard(items, batch.length, false);
-      setStatus(`${items.length} / ${batch.length} done`);
+      setStatus(`${items.length} / ${batch.length} done${useThinking ? ' (extended thinking on)' : ''}`);
     }));
   }
 
