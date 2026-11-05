@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -180,7 +181,13 @@
     border: 1px solid var(--line);
     background: var(--panel);
   }
-  .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; filter: saturate(0.85) brightness(0.95); }
+  .thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    filter: saturate(0.85) brightness(0.95);
+  }
   .thumb button {
     position: absolute;
     top: 4px;
@@ -209,7 +216,9 @@
 
   .bar {
     position: fixed;
-    left: 0; right: 0; bottom: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
     padding: 14px 20px calc(14px + env(safe-area-inset-bottom, 0px));
     background: linear-gradient(180deg, rgba(18,20,23,0) 0%, var(--bg) 35%);
   }
@@ -277,19 +286,71 @@
     align-items: center;
     justify-content: center;
   }
-  .letter.unknown { background: var(--line); color: var(--muted); }
+  .letter.unknown {
+    background: var(--line);
+    color: var(--muted);
+  }
   .result-text { min-width: 0; }
-  .q-num { font-size: 12px; color: var(--muted); margin: 0 0 2px; font-family: 'IBM Plex Mono', monospace; }
-  .a-text { font-size: 14.5px; margin: 0; line-height: 1.4; color: var(--text); }
-  .qn { flex: 0 0 auto; width: 30px; text-align: right; font-family: 'IBM Plex Mono', monospace; font-weight: 600; font-size: 15px; color: var(--muted); }
+  .q-num {
+    font-size: 12px;
+    color: var(--muted);
+    margin: 0 0 2px;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+  .a-text {
+    font-size: 14.5px;
+    margin: 0;
+    line-height: 1.4;
+    color: var(--text);
+  }
+  .qn {
+    flex: 0 0 auto;
+    width: 30px;
+    text-align: right;
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 600;
+    font-size: 15px;
+    color: var(--muted);
+  }
   .result-card.warn { border-color: var(--bad); }
   .result-card.empty { opacity: 0.45; }
-  .section-label { color: var(--bad); font-size: 13px; margin: 16px 0 2px; }
-  .summary { display: flex; gap: 12px; align-items: flex-start; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-bottom: 4px; }
-  .summary p { flex: 1; margin: 0; font-family: 'IBM Plex Mono', monospace; font-size: 13px; line-height: 1.7; word-spacing: 2px; color: var(--accent); }
-  .summary button { background: transparent; color: var(--accent); border: 1px solid var(--accent); border-radius: 999px; padding: 6px 14px; font-size: 13px; font-family: inherit; cursor: pointer; }
+  .section-label {
+    color: var(--bad);
+    font-size: 13px;
+    margin: 16px 0 2px;
+  }
+  .summary {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-bottom: 4px;
+  }
+  .summary p {
+    flex: 1;
+    margin: 0;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    line-height: 1.7;
+    word-spacing: 2px;
+    color: var(--accent);
+  }
+  .summary button {
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: 999px;
+    padding: 6px 14px;
+    font-size: 13px;
+    font-family: inherit;
+    cursor: pointer;
+  }
 </style>
 </head>
+
 <body>
 <div class="wrap">
   <header>
@@ -317,6 +378,7 @@
     <span id="countLabel">0 photos added</span>
     <span id="limitLabel">max {{ max_images }}</span>
   </div>
+
   <div class="thumbs" id="thumbs"></div>
 
   <div id="statusArea"></div>
@@ -350,46 +412,84 @@ const THINK_KEY = 'extendedThinking';
 
 function syncThinkingUi() {
   const on = thinkingToggle.checked;
+
   thinkingRow.classList.toggle('on', on);
+
   thinkingHint.textContent = on
     ? 'On: slower and uses more tokens. Stays on until you turn it off.'
     : 'Off: fastest. On: slower and uses more tokens, may help on hard math.';
 }
 
-try { thinkingToggle.checked = localStorage.getItem(THINK_KEY) === '1'; } catch (e) {}
+try {
+  thinkingToggle.checked = localStorage.getItem(THINK_KEY) === '1';
+} catch (e) {}
+
 syncThinkingUi();
 
 thinkingToggle.addEventListener('change', () => {
-  try { localStorage.setItem(THINK_KEY, thinkingToggle.checked ? '1' : '0'); } catch (e) {}
+  try {
+    localStorage.setItem(
+      THINK_KEY,
+      thinkingToggle.checked ? '1' : '0'
+    );
+  } catch (e) {}
+
   syncThinkingUi();
 });
 
+// ---- File selection
 pickBtn.addEventListener('click', () => fileInput.click());
-fileInput.addEventListener('change', (e) => addFiles(e.target.files));
+
+fileInput.addEventListener('change', (e) => {
+  addFiles(e.target.files);
+});
 
 ['dragenter', 'dragover'].forEach(evt =>
-  dropzone.addEventListener(evt, (e) => { e.preventDefault(); dropzone.classList.add('drag'); })
+  dropzone.addEventListener(evt, (e) => {
+    e.preventDefault();
+    dropzone.classList.add('drag');
+  })
 );
+
 ['dragleave', 'drop'].forEach(evt =>
-  dropzone.addEventListener(evt, (e) => { e.preventDefault(); dropzone.classList.remove('drag'); })
+  dropzone.addEventListener(evt, (e) => {
+    e.preventDefault();
+    dropzone.classList.remove('drag');
+  })
 );
-dropzone.addEventListener('drop', (e) => addFiles(e.dataTransfer.files));
+
+dropzone.addEventListener('drop', (e) => {
+  addFiles(e.dataTransfer.files);
+});
 
 function addFiles(fileList) {
-  const incoming = Array.from(fileList).filter(f => f.type.startsWith('image/'));
+  const incoming = Array.from(fileList).filter(
+    f => f.type.startsWith('image/')
+  );
+
   const room = MAX_IMAGES - files.length;
+
   if (room <= 0) {
-    setStatus(`You've already added the max of ${MAX_IMAGES} photos.`, true);
+    setStatus(
+      `You've already added the max of ${MAX_IMAGES} photos.`,
+      true
+    );
     return;
   }
+
   const accepted = incoming.slice(0, room);
+
   files = files.concat(accepted);
-  accepted.forEach(prepare);
+
   if (incoming.length > accepted.length) {
-    setStatus(`Only added ${accepted.length}: that's the ${MAX_IMAGES}-photo limit per check.`, true);
+    setStatus(
+      `Only added ${accepted.length}: that's the ${MAX_IMAGES}-photo limit per check.`,
+      true
+    );
   } else {
     setStatus('');
   }
+
   render();
   fileInput.value = '';
 }
@@ -399,25 +499,51 @@ function removeFile(index) {
   render();
 }
 
-// Cache small preview thumbnails so we don't regenerate them on every render,
-// and so we never hold a full-resolution decoded photo in memory just to show
-// a 240px-wide preview (this is what was crashing mobile Safari past ~7 photos).
+// ---- Thumbnail generation ONLY.
+// These compressed previews are never uploaded to Claude.
 const thumbCache = new WeakMap();
 
 function makeThumbnail(file, maxDim = 240) {
   return new Promise((resolve) => {
     const img = new Image();
     const url = URL.createObjectURL(file);
+
     img.onload = () => {
-      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+      const scale = Math.min(
+        1,
+        maxDim / Math.max(img.width, img.height)
+      );
+
       const canvas = document.createElement('canvas');
-      canvas.width = Math.max(1, Math.round(img.width * scale));
-      canvas.height = Math.max(1, Math.round(img.height * scale));
-      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+
+      canvas.width = Math.max(
+        1,
+        Math.round(img.width * scale)
+      );
+
+      canvas.height = Math.max(
+        1,
+        Math.round(img.height * scale)
+      );
+
+      canvas.getContext('2d').drawImage(
+        img,
+        0,
+        0,
+        canvas.width,
+        canvas.height
+      );
+
       URL.revokeObjectURL(url);
+
       resolve(canvas.toDataURL('image/jpeg', 0.7));
     };
-    img.onerror = () => { URL.revokeObjectURL(url); resolve(''); };
+
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve('');
+    };
+
     img.src = url;
   });
 }
@@ -426,80 +552,89 @@ function getThumb(file) {
   if (!thumbCache.has(file)) {
     thumbCache.set(file, makeThumbnail(file));
   }
+
   return thumbCache.get(file);
 }
 
 function render() {
-  countLabel.textContent = `${files.length} photo${files.length === 1 ? '' : 's'} added`;
+  countLabel.textContent =
+    `${files.length} photo${files.length === 1 ? '' : 's'} added`;
+
   thumbs.innerHTML = '';
   gradeBtn.disabled = files.length === 0;
+
   files.forEach((f, i) => {
     const div = document.createElement('div');
     div.className = 'thumb';
+
     const img = document.createElement('img');
+
     const badge = document.createElement('span');
     badge.className = 'badge';
     badge.textContent = i + 1;
+
     const btn = document.createElement('button');
     btn.textContent = '×';
     btn.onclick = () => removeFile(i);
+
     div.appendChild(img);
     div.appendChild(badge);
     div.appendChild(btn);
+
     thumbs.appendChild(div);
-    getThumb(f).then((src) => { if (src) img.src = src; });
+
+    getThumb(f).then((src) => {
+      if (src) img.src = src;
+    });
   });
 }
 
 function setStatus(msg, isError = false) {
   statusArea.innerHTML = '';
+
   if (!msg) return;
+
   const div = document.createElement('div');
+
   div.className = isError ? 'error-box' : 'status';
   div.textContent = msg;
+
   statusArea.appendChild(div);
 }
 
-// ---- Client-side shrink: runs as soon as a photo is added (one at a time, so
-// mobile Safari never holds several full-size decodes in memory).
-const prepared = new WeakMap();
-let prepChain = Promise.resolve();
-
-async function shrink(file, maxEdge = 1280, quality = 0.8) {
-  const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
-  const scale = Math.min(1, maxEdge / Math.max(bmp.width, bmp.height));
-  const w = Math.round(bmp.width * scale), h = Math.round(bmp.height * scale);
-  const canvas = document.createElement('canvas');
-  canvas.width = w; canvas.height = h;
-  canvas.getContext('2d').drawImage(bmp, 0, 0, w, h);
-  bmp.close();
-  return new Promise(res => canvas.toBlob(b => res(b), 'image/jpeg', quality));
-}
-
-function prepare(file) {
-  if (!prepared.has(file)) {
-    const p = prepChain.then(() => shrink(file));
-    prepChain = p.catch(() => {});
-    prepared.set(file, p);
-  }
-  return prepared.get(file);
-}
-
+// ---- Upload original image without resizing or recompressing.
 async function gradeOne(file, thinking, attempt = 0) {
   try {
-    const blob = await prepare(file);
     const fd = new FormData();
-    fd.append('image', blob, 'q.jpg');
+
+    // Send the original File object directly.
+    // No canvas, resizing, JPEG conversion, or quality reduction.
+    fd.append('image', file, file.name);
+
     fd.append('thinking', thinking ? '1' : '0');
-    const res = await fetch('/api/grade_one', { method: 'POST', body: fd });
+
+    const res = await fetch('/api/grade_one', {
+      method: 'POST',
+      body: fd
+    });
+
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Something went wrong.');
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Something went wrong.');
+    }
+
     return data.result;
+
   } catch (err) {
     if (attempt < 2) {
-      await new Promise(r => setTimeout(r, 700 * (attempt + 1)));
+      await new Promise(r =>
+        setTimeout(r, 700 * (attempt + 1))
+      );
+
       return gradeOne(file, thinking, attempt + 1);
     }
+
     throw err;
   }
 }
@@ -508,11 +643,14 @@ async function gradeOne(file, thinking, attempt = 0) {
 // The photo order is ignored completely.
 function parseNum(v) {
   const m = String(v ?? '').match(/\d+/);
+
   return m ? parseInt(m[0], 10) : null;
 }
 
 function rowHtml({ num, r, photo, cls = '' }) {
-  const unknown = !r || !r.answer || r.answer === '?';
+  const unknown =
+    !r || !r.answer || r.answer === '?';
+
   return `<div class="result-card ${cls}">
     <div class="qn">${num ?? '?'}</div>
     <div class="letter ${unknown ? 'unknown' : ''}">${escapeHtml(r?.answer || '?')}</div>
@@ -524,96 +662,208 @@ function rowHtml({ num, r, photo, cls = '' }) {
 }
 
 function renderBoard(items, total, finished) {
-  const slots = new Map();   // number -> [{r, photo}]
-  const unplaced = [];       // couldn't read a number, or the request failed
+  const slots = new Map();
+  const unplaced = [];
 
   items.forEach(({ i, r, error }) => {
-    const num = r ? parseNum(r.question_number) : null;
-    if (num === null) unplaced.push({ r: r || { answer: '?', answer_text: error }, photo: i + 1 });
-    else {
-      if (!slots.has(num)) slots.set(num, []);
-      slots.get(num).push({ r, photo: i + 1 });
+    const num = r
+      ? parseNum(r.question_number)
+      : null;
+
+    if (num === null) {
+      unplaced.push({
+        r: r || {
+          answer: '?',
+          answer_text: error
+        },
+        photo: i + 1
+      });
+    } else {
+      if (!slots.has(num)) {
+        slots.set(num, []);
+      }
+
+      slots.get(num).push({
+        r,
+        photo: i + 1
+      });
     }
   });
 
   let html = '';
+
   if (slots.size) {
     const nums = [...slots.keys()];
-    const lo = Math.min(...nums), hi = Math.max(...nums);
+
+    const lo = Math.min(...nums);
+    const hi = Math.max(...nums);
+
     for (let n = lo; n <= hi; n++) {
       const list = slots.get(n);
+
       if (!list) {
-        html += `<div class="result-card empty"><div class="qn">${n}</div>
+        html += `<div class="result-card empty">
+          <div class="qn">${n}</div>
           <div class="letter unknown">–</div>
-          <div class="result-text"><p class="a-text">${finished ? 'no photo for this number' : 'waiting…'}</p></div></div>`;
+          <div class="result-text">
+            <p class="a-text">${finished
+              ? 'no photo for this number'
+              : 'waiting…'}</p>
+          </div>
+        </div>`;
       } else if (list.length === 1) {
-        html += rowHtml({ num: n, ...list[0] });
+        html += rowHtml({
+          num: n,
+          ...list[0]
+        });
       } else {
-        list.forEach(x => { html += rowHtml({ num: n, ...x, cls: 'warn' }); });
+        list.forEach(x => {
+          html += rowHtml({
+            num: n,
+            ...x,
+            cls: 'warn'
+          });
+        });
       }
     }
   }
+
   if (unplaced.length) {
-    html += `<p class="section-label">Couldn't read the question number</p>`;
-    unplaced.forEach(x => { html += rowHtml({ num: null, ...x, cls: 'warn' }); });
+    html += `<p class="section-label">
+      Couldn't read the question number
+    </p>`;
+
+    unplaced.forEach(x => {
+      html += rowHtml({
+        num: null,
+        ...x,
+        cls: 'warn'
+      });
+    });
   }
 
   let summary = '';
+
   if (finished && slots.size) {
-    const line = [...slots.keys()].sort((a, b) => a - b)
-      .map(n => `${n}${slots.get(n)[0].r.answer || '?'}`).join('  ');
-    summary = `<div class="summary"><p>${escapeHtml(line)}</p>
-      <button type="button" id="copyBtn">Copy</button></div>`;
-    window.__summaryText = [...slots.keys()].sort((a, b) => a - b)
-      .map(n => `${n}. ${slots.get(n)[0].r.answer || '?'}`).join('\n');
+    const line = [...slots.keys()]
+      .sort((a, b) => a - b)
+      .map(n =>
+        `${n}${slots.get(n)[0].r.answer || '?'}`
+      )
+      .join('  ');
+
+    summary = `<div class="summary">
+      <p>${escapeHtml(line)}</p>
+      <button type="button" id="copyBtn">Copy</button>
+    </div>`;
+
+    window.__summaryText = [...slots.keys()]
+      .sort((a, b) => a - b)
+      .map(n =>
+        `${n}. ${slots.get(n)[0].r.answer || '?'}`
+      )
+      .join('\n');
   }
+
   resultsEl.innerHTML = summary + html;
+
   const cb = document.getElementById('copyBtn');
-  if (cb) cb.onclick = () => navigator.clipboard.writeText(window.__summaryText)
-    .then(() => { cb.textContent = 'Copied'; });
+
+  if (cb) {
+    cb.onclick = () =>
+      navigator.clipboard.writeText(window.__summaryText)
+        .then(() => {
+          cb.textContent = 'Copied';
+        });
+  }
 }
 
+// ---- Main grading process
 gradeBtn.addEventListener('click', async () => {
   if (files.length === 0) return;
+
   const batch = files.slice();
+
   // Read the switch once so the whole batch uses the same setting.
   const useThinking = thinkingToggle.checked;
+
   gradeBtn.disabled = true;
   gradeBtn.textContent = 'Checking…';
+
   resultsEl.innerHTML = '';
+
   const t0 = performance.now();
   const items = [];
-  setStatus(`0 / ${batch.length} done${useThinking ? ' (extended thinking on)' : ''}`);
+
+  setStatus(
+    `0 / ${batch.length} done${useThinking
+      ? ' (extended thinking on)'
+      : ''}`
+  );
 
   // Process at most 5 questions at a time.
   const BATCH_SIZE = 5;
 
-  for (let start = 0; start < batch.length; start += BATCH_SIZE) {
-    const currentBatch = batch.slice(start, start + BATCH_SIZE);
+  for (
+    let start = 0;
+    start < batch.length;
+    start += BATCH_SIZE
+  ) {
+    const currentBatch = batch.slice(
+      start,
+      start + BATCH_SIZE
+    );
 
-    await Promise.all(currentBatch.map(async (f, offset) => {
-      const i = start + offset;
+    await Promise.all(
+      currentBatch.map(async (f, offset) => {
+        const i = start + offset;
 
-      try {
-        items.push({ i, r: await gradeOne(f, useThinking) });
-      } catch (err) {
-        items.push({ i, error: err.message });
-      }
+        try {
+          items.push({
+            i,
+            r: await gradeOne(f, useThinking)
+          });
+        } catch (err) {
+          items.push({
+            i,
+            error: err.message
+          });
+        }
 
-      renderBoard(items, batch.length, false);
-      setStatus(`${items.length} / ${batch.length} done${useThinking ? ' (extended thinking on)' : ''}`);
-    }));
+        renderBoard(
+          items,
+          batch.length,
+          false
+        );
+
+        setStatus(
+          `${items.length} / ${batch.length} done${useThinking
+            ? ' (extended thinking on)'
+            : ''}`
+        );
+      })
+    );
   }
 
-  renderBoard(items, batch.length, true);
-  setStatus(`Finished in ${((performance.now() - t0) / 1000).toFixed(1)}s`);
+  renderBoard(
+    items,
+    batch.length,
+    true
+  );
+
+  setStatus(
+    `Finished in ${((performance.now() - t0) / 1000).toFixed(1)}s`
+  );
+
   gradeBtn.disabled = files.length === 0;
   gradeBtn.textContent = 'Check my answers';
 });
 
 function escapeHtml(s) {
   const div = document.createElement('div');
+
   div.textContent = s;
+
   return div.innerHTML;
 }
 </script>
